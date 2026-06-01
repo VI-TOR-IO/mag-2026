@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Детали прогноза{% endblock %}
+
+{% block content %}
+<section class="dashboard-section">
+    <div class="page-header">
+        <div>
+            <h2>Детали прогноза</h2>
+            <p>Входные признаки и итоговые значения для выбранной записи истории.</p>
+        </div>
+    </div>
+
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% else %}
+        {% set total_marketing = row["instrspending"] + row["tvspending"] + row["radio"] + row["onlineadsspending"] %}
+        {% set price_after_discount = row["price"] * (1 - row["discount_value"]) %}
+
+        <div class="info-panel">
+            <div class="panel-heading">
+                <div>
+                    <h3>Запись #{{ row["id"] }}</h3>
+                    <p>{{ row["created_at"] }} · {{ model_title }}</p>
+                </div>
+                {% if row["percent_diff"] is not none %}
+                    {% if row["percent_diff"] <= 15 %}
+                        <span class="status-badge status-success">точность нормальная</span>
+                    {% elif row["percent_diff"] <= 30 %}
+                        <span class="status-badge status-warning">проверить</span>
+                    {% else %}
+                        <span class="status-badge status-error">высокая ошибка</span>
+                    {% endif %}
+                {% else %}
+                    <span class="status-badge status-missing">без факта</span>
+                {% endif %}
+            </div>
+            <div class="metric-row">
+                <div class="metric-pill"><span>Прогноз</span><strong>{{ "%.2f"|format(row["prediction"]) }}</strong></div>
+                <div class="metric-pill"><span>Факт</span><strong>{{ "%.2f"|format(row["actual_sale"]) if row["actual_sale"] is not none else "-" }}</strong></div>
+                <div class="metric-pill"><span>Ошибка, %</span><strong>{{ "%.2f"|format(row["percent_diff"]) if row["percent_diff"] is not none else "-" }}</strong></div>
+                <div class="metric-pill"><span>Маркетинг всего</span><strong>{{ "%.2f"|format(total_marketing) }}</strong></div>
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="info-panel">
+                <h3>Признаки</h3>
+                <dl class="definition-list">
+                    <dt>Расходы в магазине</dt>
+                    <dd>{{ row["instrspending"] }}</dd>
+                    <dt>Скидка</dt>
+                    <dd>{{ row["discount_value"] }}</dd>
+                    <dt>Расходы на ТВ</dt>
+                    <dd>{{ row["tvspending"] }}</dd>
+                    <dt>Доля товара в наличии</dt>
+                    <dd>{{ row["stockrate"] }}</dd>
+                    <dt>Цена</dt>
+                    <dd>{{ row["price"] }}</dd>
+                    <dt>Радиореклама</dt>
+                    <dd>{{ row["radio"] }}</dd>
+                    <dt>Онлайн-реклама</dt>
+                    <dd>{{ row["onlineadsspending"] }}</dd>
+                </dl>
+            </div>
+
+            <div class="result-panel">
+                <h3>Расчетные показатели</h3>
+                <dl class="definition-list">
+                    <dt>Цена после скидки</dt>
+                    <dd>{{ "%.2f"|format(price_after_discount) }}</dd>
+                    <dt>Скидка, %</dt>
+                    <dd>{{ "%.2f"|format(row["discount_value"] * 100) }}</dd>
+                    <dt>Наличие, %</dt>
+                    <dd>{{ "%.2f"|format(row["stockrate"] * 100) }}</dd>
+                    <dt>Абс. отклонение</dt>
+                    <dd>{{ "%.2f"|format(row["absolute_diff"]) if row["absolute_diff"] is not none else "-" }}</dd>
+                    <dt>Ошибка, %</dt>
+                    <dd>{{ "%.2f"|format(row["percent_diff"]) if row["percent_diff"] is not none else "-" }}</dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="actions-row">
+            <a class="button button-secondary" href="{{ url_for('main.prediction_history') }}">Назад к истории</a>
+            {% if session.get("user_role") == "admin" %}
+                <form method="POST" action="{{ url_for('main.delete_prediction', prediction_id=row['id']) }}" onsubmit="return confirm('Удалить запись прогноза #{{ row['id'] }}?');">
+                    <button class="button-danger" type="submit">Удалить прогноз</button>
+                </form>
+            {% endif %}
+        </div>
+    {% endif %}
+</section>
+{% endblock %}

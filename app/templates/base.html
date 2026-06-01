@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Прогнозирование продаж{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <div class="header-container">
+            <div class="brand-row">
+                <div>
+                    <h1 class="site-title">Система прогнозирования продаж</h1>
+                    <p class="site-subtitle">Обучение, сравнение моделей и журнал прогнозов в одном рабочем интерфейсе</p>
+                </div>
+
+                <div class="user-bar">
+                    {% if session.get("user_id") %}
+                        <span>{{ session.get("username") }} · {{ session.get("user_role") }}</span>
+                        <a href="{{ url_for('auth.profile') }}">Профиль</a>
+                        <a href="{{ url_for('auth.logout') }}">Выйти</a>
+                    {% else %}
+                        <a href="{{ url_for('auth.login') }}">Войти</a>
+                        <a href="{{ url_for('auth.register') }}">Регистрация</a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <nav class="main-nav">
+                <a href="{{ url_for('main.index') }}" class="{% if request.path == '/' %}active{% endif %}">Главная</a>
+
+                {% if session.get("user_id") %}
+                    <a href="{{ url_for('main.upload') }}" class="{% if request.path.startswith('/upload') %}active{% endif %}">Обучение</a>
+                    <a href="{{ url_for('main.compare_models') }}" class="{% if request.path.startswith('/compare') %}active{% endif %}">Сравнение</a>
+                    <a href="{{ url_for('main.trained_models') }}" class="{% if request.path.startswith('/models') %}active{% endif %}">Модели</a>
+                    <a href="{{ url_for('main.predict_page') }}" class="{% if request.path.startswith('/predict') %}active{% endif %}">Прогноз</a>
+                    <a href="{{ url_for('main.prediction_history') }}" class="{% if request.path.startswith('/history') %}active{% endif %}">История</a>
+
+                    {% if session.get("user_role") == "admin" %}
+                        <a href="{{ url_for('auth.admin_dashboard') }}" class="{% if request.path.startswith('/admin') %}active{% endif %}">Админ-панель</a>
+                        <a href="{{ url_for('auth.users') }}" class="{% if request.path.startswith('/users') %}active{% endif %}">Пользователи</a>
+                    {% endif %}
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-stack">
+                    {% for category, message in messages %}
+                        <div class="flash flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="footer-container">
+            <p>Проект прогнозирования продаж с использованием линейной регрессии, KNN и MLP.</p>
+        </div>
+    </footer>
+</body>
+</html>

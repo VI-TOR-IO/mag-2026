@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<section class="dashboard-section">
+    <div class="result-panel">
+        <div class="panel-heading">
+            <div>
+                <h2 class="section-title">{{ title }}</h2>
+                <p>{{ message }}</p>
+            </div>
+            <span class="status-badge status-warning">системное сообщение</span>
+        </div>
+        <div class="actions-row">
+            <a class="button" href="{{ url_for('main.index') }}">На главную</a>
+            {% if session.get("user_id") %}
+                <a class="button button-secondary" href="{{ url_for('main.predict_page') }}">К прогнозу</a>
+            {% else %}
+                <a class="button button-secondary" href="{{ url_for('auth.login') }}">Войти</a>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}

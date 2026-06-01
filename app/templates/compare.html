@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Сравнение моделей{% endblock %}
+
+{% block content %}
+<section class="dashboard-section">
+    <div class="page-header">
+        <div>
+            <h2>Сравнение моделей</h2>
+            <p>Сравнение выполняется на одном train/test-разбиении, чтобы метрики были сопоставимы.</p>
+        </div>
+    </div>
+
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    <form class="panel" method="POST" enctype="multipart/form-data">
+        <div class="panel-heading">
+            <div>
+                <h3>Единый тест для моделей</h3>
+                <p>Все модели получают одинаковое разбиение и одинаковые признаки, поэтому метрики можно сравнивать напрямую.</p>
+            </div>
+        </div>
+
+        <div class="form-grid">
+            <div class="form-field">
+                <label for="preset_dataset">Предустановленный датасет</label>
+                <select name="preset_dataset" id="preset_dataset">
+                    <option value="">Не использовать</option>
+                    {% for key, dataset in preset_datasets.items() %}
+                        <option value="{{ key }}">{{ dataset.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-field">
+                <label for="dataset">CSV-файл</label>
+                <input type="file" name="dataset" id="dataset" accept=".csv">
+            </div>
+
+            <div class="form-field">
+                <label for="knn_neighbors">KNN: количество соседей</label>
+                <input type="number" min="1" max="50" name="knn_neighbors" id="knn_neighbors" value="{{ selected_knn_neighbors or 5 }}">
+            </div>
+
+            <div class="form-field">
+                <label for="mlp_epochs">MLP: максимум эпох</label>
+                <input type="number" min="20" max="2000" name="mlp_epochs" id="mlp_epochs" value="{{ selected_mlp_epochs or 300 }}">
+            </div>
+
+            <div class="form-field">
+                <label for="mlp_patience">MLP: patience</label>
+                <input type="number" min="5" max="200" name="mlp_patience" id="mlp_patience" value="{{ selected_mlp_patience or 25 }}">
+            </div>
+        </div>
+
+        <div class="actions-row">
+            <button type="submit">Сравнить модели</button>
+        </div>
+    </form>
+
+    <div class="info-strip">
+        <div>
+            <strong>Linear Regression</strong>
+            <span>быстрый интерпретируемый baseline для линейных зависимостей</span>
+        </div>
+        <div>
+            <strong>KNN</strong>
+            <span>ориентируется на похожие строки и чувствителен к масштабу и шуму</span>
+        </div>
+        <div>
+            <strong>MLP</strong>
+            <span>гибкая нейросетевая модель, которой нужны стабильные данные и контроль переобучения</span>
+        </div>
+    </div>
+
+    {% if dataset_profile and not results %}
+        <div class="info-panel">
+            <h3>Проверка датасета{% if source_name %}: {{ source_name }}{% endif %}</h3>
+            <div class="metric-row">
+                <div class="metric-pill"><span>Строк</span><strong>{{ dataset_profile.row_count }}</strong></div>
+                <div class="metric-pill"><span>Столбцов</span><strong>{{ dataset_profile.column_count }}</strong></div>
+                <div class="metric-pill"><span>Статус</span><strong>{{ "OK" if dataset_profile.is_valid else "Ошибки" }}</strong></div>
+            </div>
+            {% if dataset_profile.issues %}
+                <div class="quality-list">
+                    {% for issue in dataset_profile.issues %}
+                        <div class="quality-item quality-{{ issue.severity }}">{{ issue.message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    {% if results %}
+        <div class="info-panel">
+            <dl class="definition-list">
+                <dt>Источник данных</dt>
+                <dd>{{ source_name }}</dd>
+                <dt>Количество строк</dt>
+                <dd>{{ rows_count }}</dd>
+                <dt>Столбцы</dt>
+                <dd>{{ columns | join(', ') }}</dd>
+            </dl>
+        </div>
+
+        {% if dataset_profile and dataset_profile.issues %}
+            <div class="info-panel">
+                <h3>Предупреждения по датасету</h3>
+                <div class="quality-list">
+                    {% for issue in dataset_profile.issues %}
+                        <div class="quality-item quality-{{ issue.severity }}">{{ issue.message }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="result-panel">
+            <div class="panel-heading">
+                <div>
+                    <h3>Итог сравнения</h3>
+                    <p>Лучшая модель по R²: <strong>{{ best_model.model }}</strong>. Наибольшая ошибка RMSE: <strong>{{ worst_rmse_model.model }}</strong>.</p>
+                </div>
+                <span class="status-badge status-success">выбрана по R²</span>
+            </div>
+            <div class="metric-row">
+                <div class="metric-pill"><span>R²</span><strong>{{ best_model.r2 }}</strong></div>
+                <div class="metric-pill"><span>MAE</span><strong>{{ best_model.mae }}</strong></div>
+                <div class="metric-pill"><span>RMSE</span><strong>{{ best_model.rmse }}</strong></div>
+                <div class="metric-pill"><span>CV R²</span><strong>{{ best_model.cv_r2_mean if best_model.cv_r2_mean is not none else "-" }}</strong></div>
+            </div>
+        </div>
+
+        {% if comparison_chart %}
+            <div class="chart-grid">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <div>
+                            <h3>R² по моделям</h3>
+                            <p>Больше значение означает лучшее объяснение дисперсии целевой переменной.</p>
+                        </div>
+                        <span>выше лучше</span>
+                    </div>
+
+                    <svg class="chart-svg" viewBox="0 0 {{ comparison_chart.width }} {{ comparison_chart.r2_height }}" role="img" aria-label="Сравнение R2">
+                        <line class="chart-axis" x1="210" y1="24" x2="600" y2="24"></line>
+                        <text class="chart-label" x="206" y="16">0</text>
+                        <text class="chart-label" x="588" y="16">1</text>
+                        {% for bar in comparison_chart.r2_bars %}
+                            <text class="chart-row-label" x="{{ bar.label_x }}" y="{{ bar.label_y }}">{{ bar.label }}</text>
+                            <rect class="comparison-bar comparison-bar-{{ bar.key }}"
+                                  x="{{ bar.x }}"
+                                  y="{{ bar.y }}"
+                                  width="{{ bar.width }}"
+                                  height="{{ bar.height }}">
+                                <title>{{ bar.label }}: {{ bar.value }}</title>
+                            </rect>
+                            <text class="chart-value-label" x="{{ bar.value_x }}" y="{{ bar.value_y }}">{{ bar.value }}</text>
+                        {% endfor %}
+                    </svg>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <div>
+                            <h3>Ошибки MAE и RMSE</h3>
+                            <p>Короткие столбцы лучше: ошибка ниже относительно худшего значения в группе.</p>
+                        </div>
+                        <span>ниже лучше</span>
+                    </div>
+
+                    <svg class="chart-svg" viewBox="0 0 {{ comparison_chart.width }} {{ comparison_chart.error_height }}" role="img" aria-label="Сравнение ошибок">
+                        {% for row in comparison_chart.error_rows %}
+                            <text class="chart-row-label" x="{{ row.label_x }}" y="{{ row.label_y }}">{{ row.label }}</text>
+                            <rect class="comparison-bar error-bar-mae"
+                                  x="{{ row.mae.x }}"
+                                  y="{{ row.mae.y }}"
+                                  width="{{ row.mae.width }}"
+                                  height="{{ row.mae.height }}">
+                                <title>{{ row.label }} MAE: {{ row.mae.value }}</title>
+                            </rect>
+                            <text class="chart-value-label" x="{{ row.value_x }}" y="{{ row.mae.y + 13 }}">MAE {{ row.mae.value }}</text>
+                            <rect class="comparison-bar error-bar-rmse"
+                                  x="{{ row.rmse.x }}"
+                                  y="{{ row.rmse.y }}"
+                                  width="{{ row.rmse.width }}"
+                                  height="{{ row.rmse.height }}">
+                                <title>{{ row.label }} RMSE: {{ row.rmse.value }}</title>
+                            </rect>
+                            <text class="chart-value-label" x="{{ row.value_x }}" y="{{ row.rmse.y + 13 }}">RMSE {{ row.rmse.value }}</text>
+                        {% endfor %}
+                    </svg>
+
+                    <div class="chart-legend">
+                        <span><i class="legend-mae"></i>MAE</span>
+                        <span><i class="legend-rmse"></i>RMSE</span>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Модель</th>
+                        <th>R²</th>
+                        <th>CV R²</th>
+                        <th>MAE</th>
+                        <th>RMSE</th>
+                        <th>Комментарий</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in results %}
+                        <tr {% if row.model == best_model.model %}class="best-row"{% endif %}>
+                            <td>{{ row.model }}</td>
+                            <td>{{ row.r2 }}</td>
+                            <td>
+                                {% if row.cv_r2_mean is not none %}
+                                    {{ row.cv_r2_mean }} ± {{ row.cv_r2_std }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ row.mae }}</td>
+                            <td>{{ row.rmse }}</td>
+                            <td>
+                                {% if row.model == best_model.model %}
+                                    Лучшая модель по R²
+                                {% elif row.model == worst_rmse_model.model %}
+                                    Наибольшая ошибка RMSE
+                                {% else %}
+                                    Промежуточный результат
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</section>
+{% endblock %}

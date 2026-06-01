@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Регистрация{% endblock %}
+
+{% block content %}
+<section class="auth-panel">
+    <h2 class="section-title">Регистрация</h2>
+    <p class="auth-note">Новый пользователь получает роль analyst. Администратор может изменить роль на странице пользователей.</p>
+
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST">
+        <div class="form-field">
+            <label for="username">Логин</label>
+            <input type="text" name="username" id="username" minlength="3" required>
+        </div>
+
+        <div class="form-field">
+            <label for="email">Email</label>
+            <input type="email" name="email" id="email" required>
+        </div>
+
+        <div class="form-field">
+            <label for="password">Пароль</label>
+            <input type="password" name="password" id="password" minlength="6" required>
+        </div>
+
+        <div class="form-field">
+            <label for="confirm_password">Повторите пароль</label>
+            <input type="password" name="confirm_password" id="confirm_password" minlength="6" required>
+        </div>
+
+        <div class="actions-row">
+            <button type="submit">Зарегистрироваться</button>
+            <a href="{{ url_for('auth.login') }}">Уже есть аккаунт</a>
+        </div>
+    </form>
+
+    <div class="info-strip auth-info-strip">
+        <div>
+            <strong>Логин</strong>
+            <span>минимум 3 символа</span>
+        </div>
+        <div>
+            <strong>Пароль</strong>
+            <span>минимум 6 символов</span>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Отчёт модели{% endblock %}
+
+{% block content %}
+<section class="dashboard-section">
+    <div class="page-header">
+        <div>
+            <h2>Отчёт обучения модели</h2>
+            <p>Метрики, параметры, артефакты и диагностическая информация по сохранённой версии.</p>
+        </div>
+    </div>
+
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% else %}
+        <div class="actions-row">
+            <a class="button button-secondary" href="{{ url_for('main.export_model_report_csv', training_id=row['id']) }}">CSV-отчёт</a>
+            <a class="button button-secondary" href="{{ url_for('main.export_model_report_pdf', training_id=row['id']) }}">PDF-отчёт</a>
+            <a class="button" href="{{ url_for('main.trained_models') }}">Все модели</a>
+        </div>
+
+        <div class="info-panel">
+            <dl class="definition-list">
+                <dt>ID</dt>
+                <dd>{{ row["id"] }}</dd>
+                <dt>Дата</dt>
+                <dd>{{ row["created_at"] }}</dd>
+                <dt>Модель</dt>
+                <dd>{{ row["model_title"] }}</dd>
+                <dt>Датасет</dt>
+                <dd>{{ row["dataset_name"] }}</dd>
+                <dt>Train/Test</dt>
+                <dd>{{ row["train_size"] }} / {{ row["test_size"] }}</dd>
+                <dt>Артефакты</dt>
+                <dd>{{ row["artifact_dir"] }}</dd>
+            </dl>
+        </div>
+
+        <div class="result-panel">
+            <h3>Метрики</h3>
+            <div class="metric-row">
+                <div class="metric-pill"><span>R²</span><strong>{{ row["metrics_r2"] }}</strong></div>
+                <div class="metric-pill"><span>MAE</span><strong>{{ row["metrics_mae"] }}</strong></div>
+                <div class="metric-pill"><span>RMSE</span><strong>{{ row["metrics_rmse"] }}</strong></div>
+                <div class="metric-pill"><span>CV R²</span><strong>{{ row["cv_r2_mean"] if row["cv_r2_mean"] is not none else "-" }}</strong></div>
+            </div>
+        </div>
+
+        {% include "_ml_evaluation.html" %}
+
+        {% if parameters %}
+            <div class="info-panel">
+                <h3>Параметры</h3>
+                <dl class="definition-list">
+                    {% for key, value in parameters.items() %}
+                        <dt>{{ key }}</dt>
+                        <dd>{{ value }}</dd>
+                    {% endfor %}
+                </dl>
+            </div>
+        {% endif %}
+
+        {% if coefficients %}
+            <div class="info-panel">
+                <h3>Коэффициенты линейной регрессии</h3>
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Признак</th>
+                                <th>Коэффициент</th>
+                                <th>|Коэффициент|</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in coefficients %}
+                                <tr>
+                                    <td>{{ item.label }}</td>
+                                    <td>{{ item.coefficient }}</td>
+                                    <td>{{ item.abs_coefficient }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% endif %}
+
+        {% if loss_chart %}
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div>
+                        <h3>MLP loss</h3>
+                        <p>История обучения нейронной сети.</p>
+                    </div>
+                    <span>epoch {{ loss_chart.stopped_epoch }}</span>
+                </div>
+                <svg class="chart-svg" viewBox="0 0 420 230" role="img" aria-label="MLP loss">
+                    <line class="chart-axis" x1="48" y1="190" x2="390" y2="190"></line>
+                    <line class="chart-axis" x1="48" y1="190" x2="48" y2="24"></line>
+                    <polyline class="loss-line-train" points="{{ loss_chart.train_points }}"></polyline>
+                    {% if loss_chart.val_points %}
+                        <polyline class="loss-line-val" points="{{ loss_chart.val_points }}"></polyline>
+                    {% endif %}
+                </svg>
+                <div class="chart-legend">
+                    <span><i class="legend-train"></i>train loss</span>
+                    <span><i class="legend-val"></i>validation loss</span>
+                </div>
+            </div>
+        {% endif %}
+
+        {% if dataset_report %}
+            <div class="info-panel">
+                <h3>Профиль датасета</h3>
+                <div class="metric-row">
+                    <div class="metric-pill"><span>Строк</span><strong>{{ dataset_report.row_count }}</strong></div>
+                    <div class="metric-pill"><span>Столбцов</span><strong>{{ dataset_report.column_count }}</strong></div>
+                    <div class="metric-pill"><span>Статус</span><strong>{{ "OK" if dataset_report.is_valid else "Ошибки" }}</strong></div>
+                </div>
+            </div>
+        {% endif %}
+    {% endif %}
+</section>
+{% endblock %}

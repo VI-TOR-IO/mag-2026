@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}История прогнозов{% endblock %}
+
+{% block content %}
+<section class="dashboard-section">
+    <div class="page-header">
+        <div>
+            <h2>История прогнозов</h2>
+            <p>Последние сохранённые прогнозы с фактическими значениями и рассчитанной ошибкой.</p>
+        </div>
+        {% if session.get("user_role") == "admin" %}
+            <div class="actions-row">
+                <a class="button" href="{{ url_for('main.predict_page') }}">Новый прогноз</a>
+                <a class="button button-secondary" href="{{ url_for('main.export_history_csv') }}">Экспорт CSV</a>
+            </div>
+        {% else %}
+            <div class="actions-row">
+                <a class="button" href="{{ url_for('main.predict_page') }}">Новый прогноз</a>
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="stats-grid">
+        <div class="metric-pill"><span>Показано записей</span><strong>{{ rows | length }}</strong></div>
+        <div class="metric-pill"><span>С факт. Sale</span><strong>{{ history_charts.trend.count if history_charts and history_charts.trend else 0 }}</strong></div>
+        <div class="metric-pill"><span>Моделей в истории</span><strong>{{ history_charts.model_counts | length if history_charts and history_charts.model_counts else 0 }}</strong></div>
+        <div class="metric-pill"><span>Средние ошибки</span><strong>{{ history_charts.avg_errors | length if history_charts and history_charts.avg_errors else 0 }}</strong></div>
+    </div>
+
+    {% if history_charts and (history_charts.trend or history_charts.model_counts or history_charts.avg_errors) %}
+        <div class="chart-grid">
+            {% if history_charts.trend %}
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <div>
+                            <h3>Ошибка по времени</h3>
+                            <p>Динамика percent_diff для прогнозов с известным фактическим Sale.</p>
+                        </div>
+                        <span>{{ history_charts.trend.count }} прогнозов</span>
+                    </div>
+                    <svg class="chart-svg" viewBox="0 0 420 220" role="img" aria-label="Ошибка по времени">
+                        <line class="chart-axis" x1="42" y1="170" x2="390" y2="170"></line>
+                        <line class="chart-axis" x1="42" y1="170" x2="42" y2="24"></line>
+                        <polyline class="loss-line-val" points="{{ history_charts.trend.points }}"></polyline>
+                        <text class="chart-label" x="8" y="172">0</text>
+                        <text class="chart-label" x="8" y="30">{{ history_charts.trend.max_value }}%</text>
+                        <text class="chart-axis-title" x="166" y="205">Порядок прогнозов</text>
+                    </svg>
+                </div>
+            {% endif %}
+
+            {% if history_charts.model_counts %}
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <div>
+                            <h3>Прогнозы по моделям</h3>
+                            <p>Сколько раз каждая модель использовалась для ручного прогноза.</p>
+                        </div>
+                    </div>
+                    <div class="bar-list">
+                        {% for row in history_charts.model_counts %}
+                            <svg class="mini-bar-svg" viewBox="0 0 420 34" role="img" aria-label="{{ row.label }}">
+                                <text class="chart-row-label" x="0" y="21">{{ row.label }}</text>
+                                <rect class="mini-bar-track" x="170" y="9" width="220" height="14"></rect>
+                                <rect class="mini-bar-fill" x="170" y="9" width="{{ row.width }}" height="14"></rect>
+                                <text class="chart-value-label" x="398" y="21">{{ row.value }}</text>
+                            </svg>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            {% if history_charts.avg_errors %}
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <div>
+                            <h3>Средняя ошибка</h3>
+                            <p>Средний percent_diff по каждой модели.</p>
+                        </div>
+                    </div>
+                    <div class="bar-list">
+                        {% for row in history_charts.avg_errors %}
+                            <svg class="mini-bar-svg" viewBox="0 0 420 34" role="img" aria-label="{{ row.label }}">
+                                <text class="chart-row-label" x="0" y="21">{{ row.label }}</text>
+                                <rect class="mini-bar-track" x="170" y="9" width="220" height="14"></rect>
+                                <rect class="mini-bar-fill mini-bar-warning" x="170" y="9" width="{{ row.width }}" height="14"></rect>
+                                <text class="chart-value-label" x="360" y="21">{{ row.value }}%</text>
+                            </svg>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    {% if rows %}
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Дата</th>
+                        <th>Модель</th>
+                        <th>Прогноз</th>
+                        <th>Факт</th>
+                        <th>Абс. отклонение</th>
+                        <th>Ошибка, %</th>
+                        <th>Детали</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                        <tr>
+                            <td>{{ row["id"] }}</td>
+                            <td>{{ row["created_at"] }}</td>
+                            <td>{{ model_options.get(row["model_name"], row["model_name"]) }}</td>
+                            <td>{{ "%.2f"|format(row["prediction"]) }}</td>
+                            <td>{{ "%.2f"|format(row["actual_sale"]) if row["actual_sale"] is not none else "-" }}</td>
+                            <td>{{ "%.2f"|format(row["absolute_diff"]) if row["absolute_diff"] is not none else "-" }}</td>
+                            <td>{{ "%.2f"|format(row["percent_diff"]) if row["percent_diff"] is not none else "-" }}</td>
+                            <td><a href="{{ url_for('main.prediction_detail', prediction_id=row['id']) }}">Открыть</a></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty-state">История прогнозов пока пуста.</div>
+    {% endif %}
+</section>
+{% endblock %}

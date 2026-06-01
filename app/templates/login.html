@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Вход{% endblock %}
+
+{% block content %}
+<section class="auth-panel">
+    <h2 class="section-title">Вход в систему</h2>
+    <p class="auth-note">После входа доступны обучение моделей, ручные прогнозы, история и отчеты качества.</p>
+
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST">
+        <div class="form-field">
+            <label for="email">Email</label>
+            <input type="email" name="email" id="email" required>
+        </div>
+
+        <div class="form-field">
+            <label for="password">Пароль</label>
+            <input type="password" name="password" id="password" required>
+        </div>
+
+        <div class="actions-row">
+            <button type="submit">Войти</button>
+            <a href="{{ url_for('auth.register') }}">Создать аккаунт</a>
+        </div>
+    </form>
+
+    <div class="quality-list">
+        <div class="quality-item quality-success">
+            <strong>Аналитик</strong>
+            <span>может обучать модели, сравнивать качество и выполнять прогнозы.</span>
+        </div>
+        <div class="quality-item quality-warning">
+            <strong>Администратор</strong>
+            <span>дополнительно управляет пользователями и экспортом истории.</span>
+        </div>
+    </div>
+</section>
+{% endblock %}

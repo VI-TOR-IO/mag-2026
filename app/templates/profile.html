@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Профиль{% endblock %}
+
+{% block content %}
+<section class="dashboard-section">
+    <div class="page-header">
+        <div>
+            <h2>Личный кабинет</h2>
+            <p>Управление базовыми данными аккаунта и смена пароля.</p>
+        </div>
+    </div>
+
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    <div class="info-panel">
+        <div class="panel-heading">
+            <div>
+                <h3>{{ user["username"] }}</h3>
+                <p>{{ user["email"] }} · зарегистрирован {{ user["created_at"] }}</p>
+            </div>
+            <span class="status-badge status-{{ 'success' if user['role'] == 'admin' else 'trained' }}">{{ user["role"] }}</span>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <div class="panel-heading">
+                <div>
+                    <h3>Основные данные</h3>
+                    <p>Логин отображается в верхней панели, email используется для входа.</p>
+                </div>
+            </div>
+            <form method="POST">
+                <input type="hidden" name="action" value="update_profile">
+
+                <div class="form-field">
+                    <label for="username">Логин</label>
+                    <input type="text" name="username" id="username" value="{{ user['username'] }}" minlength="3" required>
+                </div>
+
+                <div class="form-field">
+                    <label for="email">Email</label>
+                    <input type="email" name="email" id="email" value="{{ user['email'] }}" required>
+                </div>
+
+                <div class="form-field">
+                    <label for="role">Роль</label>
+                    <input type="text" id="role" value="{{ user['role'] }}" disabled>
+                </div>
+
+                <div class="actions-row">
+                    <button type="submit">Сохранить профиль</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="dashboard-card">
+            <div class="panel-heading">
+                <div>
+                    <h3>Смена пароля</h3>
+                    <p>Новый пароль должен содержать минимум 6 символов.</p>
+                </div>
+            </div>
+            <form method="POST">
+                <input type="hidden" name="action" value="update_password">
+
+                <div class="form-field">
+                    <label for="current_password">Текущий пароль</label>
+                    <input type="password" name="current_password" id="current_password" required>
+                </div>
+
+                <div class="form-field">
+                    <label for="new_password">Новый пароль</label>
+                    <input type="password" name="new_password" id="new_password" minlength="6" required>
+                </div>
+
+                <div class="form-field">
+                    <label for="confirm_password">Повторите новый пароль</label>
+                    <input type="password" name="confirm_password" id="confirm_password" minlength="6" required>
+                </div>
+
+                <div class="actions-row">
+                    <button type="submit">Изменить пароль</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="info-strip">
+        <div>
+            <strong>ID пользователя</strong>
+            <span>{{ user["id"] }}</span>
+        </div>
+        <div>
+            <strong>Роль</strong>
+            <span>{{ user["role"] }}</span>
+        </div>
+        <div>
+            <strong>Безопасность</strong>
+            <span>после смены пароля используйте новые данные при следующем входе</span>
+        </div>
+    </div>
+</section>
+{% endblock %}

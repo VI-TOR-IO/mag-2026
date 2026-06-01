@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Админ-панель{% endblock %}
+
+{% block content %}
+<section class="dashboard-section">
+    <div class="page-header">
+        <div>
+            <h2>Админ-панель</h2>
+            <p>Сводка по пользователям, прогнозам и последним действиям.</p>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <div class="panel-heading">
+                <div>
+                    <h3>Пользователи</h3>
+                    <p>Контроль ролей и доступа к административным функциям.</p>
+                </div>
+            </div>
+            <div class="metric-row">
+                <div class="metric-pill"><span>Всего</span><strong>{{ stats.total_users }}</strong></div>
+                <div class="metric-pill"><span>Админы</span><strong>{{ stats.total_admins }}</strong></div>
+                <div class="metric-pill"><span>Аналитики</span><strong>{{ stats.total_analysts }}</strong></div>
+            </div>
+            <div class="actions-row">
+                <a class="button" href="{{ url_for('auth.users') }}">Управление</a>
+            </div>
+        </div>
+
+        <div class="dashboard-card">
+            <div class="panel-heading">
+                <div>
+                    <h3>Прогнозы и модели</h3>
+                    <p>Операционная сводка по использованию системы.</p>
+                </div>
+            </div>
+            <div class="metric-row">
+                <div class="metric-pill"><span>Всего</span><strong>{{ stats.total_predictions }}</strong></div>
+                <div class="metric-pill"><span>Обучений</span><strong>{{ stats.total_training_runs }}</strong></div>
+                <div class="metric-pill">
+                    <span>Средняя ошибка, %</span>
+                    <strong>{{ stats.avg_percent_diff if stats.avg_percent_diff is not none else "-" }}</strong>
+                </div>
+            </div>
+            <div class="actions-row">
+                <a class="button" href="{{ url_for('main.prediction_history') }}">История</a>
+                <a class="button" href="{{ url_for('main.trained_models') }}">Модели</a>
+                <a class="button button-secondary" href="{{ url_for('main.export_history_csv') }}">CSV</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-strip">
+        <div>
+            <strong>Администратор</strong>
+            <span>может менять роли, удалять пользователей и экспортировать историю прогнозов</span>
+        </div>
+        <div>
+            <strong>Аналитик</strong>
+            <span>может обучать модели, сравнивать качество и выполнять ручные прогнозы</span>
+        </div>
+        <div>
+            <strong>Аудит</strong>
+            <span>последние прогнозы и экспорт помогают проверить качество работы модели</span>
+        </div>
+    </div>
+
+    <div class="info-panel">
+        <div class="panel-heading">
+            <div>
+                <h3>Последние прогнозы</h3>
+                <p>Последние записи помогают быстро заметить рост ошибки или отсутствие фактического Sale.</p>
+            </div>
+            <a class="button button-secondary" href="{{ url_for('main.prediction_history') }}">Вся история</a>
+        </div>
+
+        {% if stats.recent_predictions %}
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Дата</th>
+                            <th>Модель</th>
+                            <th>Прогноз</th>
+                            <th>Факт</th>
+                            <th>Ошибка, %</th>
+                            <th>Детали</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in stats.recent_predictions %}
+                            <tr>
+                                <td>{{ row["id"] }}</td>
+                                <td>{{ row["created_at"] }}</td>
+                                <td>{{ row["model_name"] }}</td>
+                                <td>{{ "%.2f"|format(row["prediction"]) }}</td>
+                                <td>{{ "%.2f"|format(row["actual_sale"]) if row["actual_sale"] is not none else "-" }}</td>
+                                <td>{{ "%.2f"|format(row["percent_diff"]) if row["percent_diff"] is not none else "-" }}</td>
+                                <td><a href="{{ url_for('main.prediction_detail', prediction_id=row['id']) }}">Открыть</a></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty-state">Прогнозов пока нет.</div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

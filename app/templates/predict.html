@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}Ручной прогноз{% endblock %}
+
+{% block content %}
+{% set selected_summary = model_summaries[selected_model] if selected_model in model_summaries else none %}
+
+<section class="dashboard-section">
+    <div class="page-header">
+        <div>
+            <h2>Ручной прогноз продаж</h2>
+            <p>Выберите обученную модель, заполните сценарий продаж и при необходимости добавьте фактическое Sale для контроля ошибки.</p>
+        </div>
+    </div>
+
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    {% if not has_trained_models %}
+        <div class="alert flash-warning">
+            Для ручного прогноза нужна обученная модель с активными артефактами. Запустите обучение или проверьте каталог models.
+        </div>
+    {% endif %}
+
+    <div class="predict-workspace">
+        <form class="panel predict-form" id="predict-form" method="POST">
+            <div class="predict-form-top">
+                <div class="form-field">
+                    <label for="model_name">Модель</label>
+                    <select name="model_name" id="model_name" required>
+                        {% for key, title in model_options.items() %}
+                            {% set summary = model_summaries[key] %}
+                            <option value="{{ key }}"
+                                    {% if selected_model == key %}selected{% endif %}
+                                    {% if not summary.is_ready %}disabled{% endif %}>
+                                {{ title }}{% if not summary.is_ready %} — недоступна{% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-field">
+                    <label class="label-with-help" for="actual_sale">
+                        <span>Фактическое Sale</span>
+                        <span class="help-anchor" tabindex="0" aria-label="Подсказка по фактическому Sale">?</span>
+                        <span class="help-popover" role="tooltip">
+                            Необязательное поле. Если известно фактическое значение, система сохранит прогноз и рассчитает абсолютную и процентную ошибку.
+                        </span>
+                    </label>
+                    <input type="number"
+                           step="any"
+                           min="0"
+                           name="actual_sale"
+                           id="actual_sale"
+                           value="{{ actual_sale if actual_sale is defined and actual_sale is not none else '' }}"
+                           placeholder="например 12500">
+                </div>
+            </div>
+
+            {% for group in feature_groups %}
+                <section class="form-subsection">
+                    <div class="subsection-header">
+                        <h3>{{ group.title }}</h3>
+                        <span>{{ group.description }}</span>
+                    </div>
+
+                    <div class="form-grid">
+                        {% for feature in group.features %}
+                            {% set rules = feature_input_rules[feature] %}
+                            <div class="form-field">
+                                <label class="label-with-help" for="{{ feature }}">
+                                    <span>{{ feature_labels[feature] }}</span>
+                                    <span class="field-unit">{{ feature_units[feature] }}</span>
+                                    <span class="help-anchor" tabindex="0" aria-label="Подсказка по полю {{ feature_labels[feature] }}">?</span>
+                                    <span class="help-popover" role="tooltip">{{ feature_help[feature] }}</span>
+                                </label>
+                                <input
+                                    type="number"
+                                    step="{{ rules.step }}"
+                                    {% if rules.min is defined %}min="{{ rules.min }}"{% endif %}
+                                    {% if rules.max is defined %}max="{{ rules.max }}"{% endif %}
+                                    name="{{ feature }}"
+                                    id="{{ feature }}"
+                                    data-feature="{{ feature }}"
+                                    value="{{ entered_values[feature] if entered_values and feature in entered_values else '' }}"
+                                    placeholder="{{ rules.placeholder }}"
+                                    required
+                                >
+                            </div>
+                        {% endfor %}
+                    </div>
+                </section>
+            {% endfor %}
+
+            <div class="actions-row predict-actions">
+                <button type="submit" {% if not has_trained_models %}disabled{% endif %}>Получить прогноз</button>
+                <button class="button-secondary" type="button" id="sample-row-button">Подставить строку из датасета</button>
+                <button class="button-secondary" type="reset">Очистить</button>
+            </div>
+        </form>
+
+        <aside class="info-panel predict-sidebar">
+            <h3>Статус модели</h3>
+            <div class="model-status-stack">
+                {% for key, summary in model_summaries.items() %}
+                    <div class="model-status-row {% if selected_model == key %}active{% endif %}">
+                        <div>
+                            <strong>{{ summary.title }}</strong>
+                            {% if summary.is_trained %}
+                                <span>R² {{ summary.metrics_r2 }} · RMSE {{ summary.metrics_rmse }}</span>
+                            {% else %}
+                                <span>{{ summary.status_text }}</span>
+                            {% endif %}
+                        </div>
+                        {% if summary.is_ready %}
+                            <em class="status-badge status-trained">{{ summary.verdict_label or "готова" }}</em>
+                        {% elif summary.is_trained %}
+                            <em class="status-badge status-warning">артефакты</em>
+                        {% else %}
+                            <em class="status-badge status-missing">нет</em>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div class="scenario-preview">
+                <h3>Сводка сценария</h3>
+                <dl class="definition-list compact-definition-list">
+                    <dt>Общие затраты на маркетинг</dt>
+                    <dd id="preview-total-spend">-</dd>
+                    <dt>Цена после скидки</dt>
+                    <dd id="preview-net-price">-</dd>
+                    <dt>Скидка</dt>
+                    <dd id="preview-discount">-</dd>
+                    <dt>Наличие</dt>
+                    <dd id="preview-stock">-</dd>
+                </dl>
+            </div>
+        </aside>
+    </div>
+
+    {% if prediction is defined and prediction is not none %}
+        <div class="result-panel prediction-result-panel">
+            <div class="prediction-result-header">
+                <div>
+                    <span>Прогноз Sale</span>
+                    <strong>{{ prediction }}</strong>
+                </div>
+                {% if error_summary %}
+                    <em class="status-badge status-{{ error_summary.level }}">{{ error_summary.label }}</em>
+                {% endif %}
+            </div>
+
+            <div class="metric-row">
+                <div class="metric-pill"><span>Модель</span><strong>{{ selected_model_title }}</strong></div>
+                {% if prediction_summary %}
+                    <div class="metric-pill"><span>Маркетинг всего</span><strong>{{ prediction_summary.total_marketing_spend }}</strong></div>
+                    <div class="metric-pill"><span>Цена после скидки</span><strong>{{ prediction_summary.price_after_discount }}</strong></div>
+                    <div class="metric-pill"><span>Скидка</span><strong>{{ prediction_summary.discount_percent }}%</strong></div>
+                    <div class="metric-pill"><span>Наличие</span><strong>{{ prediction_summary.stock_percent }}%</strong></div>
+                {% endif %}
+            </div>
+
+            {% if actual_sale is not none %}
+                <div class="table-wrapper prediction-error-table">
+                    <table class="data-table compact-table">
+                        <thead>
+                            <tr>
+                                <th>Факт</th>
+                                <th>Прогноз</th>
+                                <th>Абсолютное отклонение</th>
+                                <th>Ошибка, %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>{{ actual_sale }}</td>
+                                <td>{{ prediction }}</td>
+                                <td>{{ absolute_diff }}</td>
+                                <td>{{ percent_diff if percent_diff is not none else "-" }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if error_summary %}
+                    <div class="quality-item quality-{{ error_summary.level }}">
+                        <strong>{{ error_summary.label }}</strong>
+                        <span>{{ error_summary.message }}</span>
+                    </div>
+                {% endif %}
+            {% endif %}
+        </div>
+    {% endif %}
+</section>
+
+<script>
+const featureIds = {{ feature_columns | tojson }};
+
+function numericValue(id) {
+    const input = document.getElementById(id);
+    if (!input || input.value === "") {
+        return null;
+    }
+    const value = Number(input.value);
+    return Number.isFinite(value) ? value : null;
+}
+
+function formatNumber(value, suffix = "") {
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+        return "-";
+    }
+    return `${Math.round(value * 100) / 100}${suffix}`;
+}
+
+function updateScenarioPreview() {
+    const inStore = numericValue("InStrSpending") || 0;
+    const tv = numericValue("TVSpending") || 0;
+    const radio = numericValue("Radio") || 0;
+    const online = numericValue("OnlineAdsSpending") || 0;
+    const price = numericValue("Price");
+    const discount = numericValue("Discount");
+    const stock = numericValue("StockRate");
+
+    const totalSpend = inStore + tv + radio + online;
+    const netPrice = price !== null && discount !== null ? price * (1 - discount) : null;
+
+    document.getElementById("preview-total-spend").textContent = formatNumber(totalSpend);
+    document.getElementById("preview-net-price").textContent = formatNumber(netPrice);
+    document.getElementById("preview-discount").textContent = discount !== null ? formatNumber(discount * 100, "%") : "-";
+    document.getElementById("preview-stock").textContent = stock !== null ? formatNumber(stock * 100, "%") : "-";
+}
+
+async function fillSampleRow() {
+    const button = document.getElementById("sample-row-button");
+    const originalText = button ? button.textContent : "";
+
+    try {
+        if (button) {
+            button.disabled = true;
+            button.textContent = "Загрузка...";
+        }
+
+        const response = await fetch("{{ url_for('main.predict_sample_row') }}");
+        const data = await response.json();
+
+        if (!data.success) {
+            alert(data.error || "Не удалось получить строку из датасета.");
+            return;
+        }
+
+        Object.keys(data.row).forEach((key) => {
+            const input = document.getElementById(key);
+            if (input) {
+                input.value = data.row[key];
+            }
+        });
+
+        const actualSaleInput = document.getElementById("actual_sale");
+        if (actualSaleInput && data.actual_sale !== undefined) {
+            actualSaleInput.value = data.actual_sale;
+        }
+
+        updateScenarioPreview();
+    } catch (error) {
+        alert("Ошибка при подстановке данных из датасета.");
+        console.error(error);
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = originalText;
+        }
+    }
+}
+
+featureIds.forEach((id) => {
+    const input = document.getElementById(id);
+    if (input) {
+        input.addEventListener("input", updateScenarioPreview);
+    }
+});
+
+const sampleButton = document.getElementById("sample-row-button");
+if (sampleButton) {
+    sampleButton.addEventListener("click", fillSampleRow);
+}
+
+const predictForm = document.getElementById("predict-form");
+if (predictForm) {
+    predictForm.addEventListener("reset", () => {
+        window.setTimeout(updateScenarioPreview, 0);
+    });
+}
+
+updateScenarioPreview();
+</script>
+{% endblock %}

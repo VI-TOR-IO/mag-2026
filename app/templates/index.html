@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Главная{% endblock %}
+
+{% block content %}
+<section class="dashboard-section">
+    <div class="page-header">
+        <div>
+            <h2>Рабочая панель</h2>
+            <p>Центр управления прогнозированием: обучение моделей, контроль качества, ручные прогнозы и аудит результатов.</p>
+        </div>
+        {% if not session.get("user_id") %}
+            <div class="actions-row">
+                <a class="button" href="{{ url_for('auth.login') }}">Войти</a>
+                <a class="button button-secondary" href="{{ url_for('auth.register') }}">Создать аккаунт</a>
+            </div>
+        {% else %}
+            <div class="actions-row">
+                <a class="button" href="{{ url_for('main.predict_page') }}">Сделать прогноз</a>
+                <a class="button button-secondary" href="{{ url_for('main.upload') }}">Обучить модель</a>
+            </div>
+        {% endif %}
+    </div>
+
+    {% if session.get("user_id") and stats %}
+        <div class="stats-grid">
+            <div class="metric-pill"><span>Обучений</span><strong>{{ stats.total_training_runs }}</strong></div>
+            <div class="metric-pill"><span>Прогнозов</span><strong>{{ stats.total_predictions }}</strong></div>
+            <div class="metric-pill"><span>Пользователей</span><strong>{{ stats.total_users }}</strong></div>
+            <div class="metric-pill"><span>Средняя ошибка, %</span><strong>{{ stats.avg_percent_diff if stats.avg_percent_diff is not none else "-" }}</strong></div>
+        </div>
+    {% endif %}
+
+    <div class="workflow-grid">
+        <a class="workflow-card" href="{{ url_for('main.upload') }}">
+            <span>1</span>
+            <strong>Обучение</strong>
+            <p>Загрузка CSV, валидация датасета, train/test split, baseline, CV и сохранение версии модели.</p>
+        </a>
+
+        <a class="workflow-card" href="{{ url_for('main.compare_models') }}">
+            <span>2</span>
+            <strong>Сравнение</strong>
+            <p>Проверка Linear Regression, KNN и MLP на одном наборе данных с графиками качества.</p>
+        </a>
+
+        <a class="workflow-card" href="{{ url_for('main.predict_page') }}">
+            <span>3</span>
+            <strong>Ручной прогноз</strong>
+            <p>Рабочий сценарий с подсказками, сводкой признаков, сохранением результата и ошибкой к факту.</p>
+        </a>
+
+        <a class="workflow-card" href="{{ url_for('main.prediction_history') }}">
+            <span>4</span>
+            <strong>Аудит</strong>
+            <p>История прогнозов, детали входных признаков, графики ошибок и экспорт для администратора.</p>
+        </a>
+    </div>
+
+    {% if session.get("user_id") and model_summaries %}
+        <div class="info-panel">
+            <div class="panel-heading">
+                <div>
+                    <h3>Готовность моделей</h3>
+                    <p>Для ручного прогноза важна не только запись в истории, но и наличие активных артефактов модели.</p>
+                </div>
+                <a class="button button-secondary" href="{{ url_for('main.trained_models') }}">Открыть модели</a>
+            </div>
+
+            <div class="model-status-stack model-status-grid">
+                {% for key, summary in model_summaries.items() %}
+                    <div class="model-status-row">
+                        <div>
+                            <strong>{{ summary.title }}</strong>
+                            {% if summary.is_ready %}
+                                <span>R² {{ summary.metrics_r2 }} · RMSE {{ summary.metrics_rmse }}</span>
+                            {% elif summary.is_trained %}
+                                <span>Обучение есть, активные файлы модели не найдены</span>
+                            {% else %}
+                                <span>Модель еще не обучалась</span>
+                            {% endif %}
+                        </div>
+                        {% if summary.is_ready %}
+                            <em class="status-badge status-trained">{{ summary.verdict_label or "готова" }}</em>
+                        {% elif summary.is_trained %}
+                            <em class="status-badge status-warning">артефакты</em>
+                        {% else %}
+                            <em class="status-badge status-missing">нет</em>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="dashboard-grid">
+        <div class="info-panel">
+            <h3>Что считается качественным прогнозом</h3>
+            <div class="quality-list">
+                <div class="quality-item quality-success">
+                    <strong>Модель лучше baseline</strong>
+                    <span>RMSE должен быть ниже прогноза средним Sale на train-выборке.</span>
+                </div>
+                <div class="quality-item quality-success">
+                    <strong>Нет явного переобучения</strong>
+                    <span>Разрыв R² между train и test должен оставаться умеренным.</span>
+                </div>
+                <div class="quality-item quality-warning">
+                    <strong>Данные проверены</strong>
+                    <span>Discount и StockRate в диапазоне 0..1, расходы и цена не отрицательные.</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <h3>Ожидаемый CSV</h3>
+            <p>Файл должен содержать целевой столбец Sale и семь признаков:</p>
+            <div class="tag-list">
+                <span>InStrSpending</span>
+                <span>Discount</span>
+                <span>TVSpending</span>
+                <span>StockRate</span>
+                <span>Price</span>
+                <span>Radio</span>
+                <span>OnlineAdsSpending</span>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

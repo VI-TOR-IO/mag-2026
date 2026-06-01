@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Пользователи{% endblock %}
+
+{% block content %}
+<section class="dashboard-section">
+    <div class="page-header">
+        <div>
+            <h2>Пользователи системы</h2>
+            <p>Управление ролями и удаление учетных записей.</p>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="metric-pill"><span>Всего</span><strong>{{ user_stats.total }}</strong></div>
+        <div class="metric-pill"><span>Администраторы</span><strong>{{ user_stats.admins }}</strong></div>
+        <div class="metric-pill"><span>Аналитики</span><strong>{{ user_stats.analysts }}</strong></div>
+        <div class="metric-pill"><span>Текущая роль</span><strong>{{ session.get("user_role") }}</strong></div>
+    </div>
+
+    <div class="info-strip">
+        <div>
+            <strong>admin</strong>
+            <span>полный доступ: пользователи, экспорт истории, удаление прогнозов</span>
+        </div>
+        <div>
+            <strong>analyst</strong>
+            <span>рабочий доступ: обучение, сравнение, прогнозы и просмотр истории</span>
+        </div>
+        <div>
+            <strong>Защита</strong>
+            <span>администратор не может снять роль или удалить собственную учетную запись</span>
+        </div>
+    </div>
+
+    {% if rows %}
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Логин</th>
+                        <th>Email</th>
+                        <th>Роль</th>
+                        <th>Дата создания</th>
+                        <th>Изменить роль</th>
+                        <th>Удалить</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                        <tr>
+                            <td>{{ row["id"] }}</td>
+                            <td>{{ row["username"] }}</td>
+                            <td>{{ row["email"] }}</td>
+                            <td><span class="status-badge status-{{ 'success' if row['role'] == 'admin' else 'trained' }}">{{ row["role"] }}</span></td>
+                            <td>{{ row["created_at"] }}</td>
+                            <td>
+                                <form class="inline-form" method="POST">
+                                    <input type="hidden" name="action" value="change_role">
+                                    <input type="hidden" name="user_id" value="{{ row['id'] }}">
+
+                                    <select name="new_role">
+                                        <option value="analyst" {% if row["role"] == "analyst" %}selected{% endif %}>analyst</option>
+                                        <option value="admin" {% if row["role"] == "admin" %}selected{% endif %}>admin</option>
+                                    </select>
+
+                                    <button type="submit">Сохранить</button>
+                                </form>
+                            </td>
+                            <td>
+                                <form method="POST" onsubmit="return confirm('Удалить пользователя {{ row['username'] }}?');">
+                                    <input type="hidden" name="action" value="delete_user">
+                                    <input type="hidden" name="user_id" value="{{ row['id'] }}">
+                                    <button class="button-danger" type="submit" {% if row["id"] == session.get("user_id") %}disabled{% endif %}>Удалить</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty-state">Пользователи не найдены.</div>
+    {% endif %}
+</section>
+{% endblock %}

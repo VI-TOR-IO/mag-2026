@@ -1,0 +1,108 @@
+{% if adequacy_report %}
+    <div class="verdict-card verdict-{{ adequacy_report.verdict }}">
+        <div>
+            <h3>Проверка адекватности модели</h3>
+            <p>{{ adequacy_report.summary }}</p>
+        </div>
+        <span>{{ adequacy_report.verdict_label }}</span>
+    </div>
+
+    <div class="quality-list">
+        {% for check in adequacy_report.checks %}
+            <div class="quality-item quality-{{ check.status }}">
+                <strong>{{ check.title }}</strong>
+                <span>{{ check.detail }}</span>
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
+
+{% if baseline_metrics or train_metrics %}
+    <div class="chart-grid">
+        {% if baseline_metrics %}
+            <div class="info-panel">
+                <h3>Сравнение с baseline</h3>
+                <p>Baseline нужен как минимальная планка: модель должна быть заметно лучше прогноза средним значением Sale.</p>
+                <div class="metric-row">
+                    <div class="metric-pill"><span>Baseline RMSE</span><strong>{{ baseline_metrics.rmse }}</strong></div>
+                    <div class="metric-pill"><span>Baseline MAE</span><strong>{{ baseline_metrics.mae }}</strong></div>
+                    <div class="metric-pill"><span>Baseline R²</span><strong>{{ baseline_metrics.r2 }}</strong></div>
+                    {% if adequacy_report and adequacy_report.baseline_improvement_percent is not none %}
+                        <div class="metric-pill"><span>Улучшение RMSE</span><strong>{{ adequacy_report.baseline_improvement_percent }}%</strong></div>
+                    {% endif %}
+                </div>
+                <p class="panel-note">{{ baseline_metrics.strategy }}: {{ baseline_metrics.prediction_value }}</p>
+            </div>
+        {% endif %}
+
+        {% if train_metrics %}
+            <div class="info-panel">
+                <h3>Train против test</h3>
+                <p>Сравнение показывает, не стала ли модель слишком хорошо запоминать train-выборку.</p>
+                <div class="table-wrapper">
+                    <table class="data-table compact-table">
+                        <thead>
+                            <tr>
+                                <th>Выборка</th>
+                                <th>R²</th>
+                                <th>MAE</th>
+                                <th>RMSE</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Train</td>
+                                <td>{{ train_metrics.r2 }}</td>
+                                <td>{{ train_metrics.mae }}</td>
+                                <td>{{ train_metrics.rmse }}</td>
+                            </tr>
+                            <tr>
+                                <td>Test</td>
+                                <td>{{ test_metrics.r2 }}</td>
+                                <td>{{ test_metrics.mae }}</td>
+                                <td>{{ test_metrics.rmse }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                {% if adequacy_report and adequacy_report.train_test_r2_gap is not none %}
+                    <p class="panel-note">Разрыв R²: {{ adequacy_report.train_test_r2_gap }}</p>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+{% endif %}
+
+{% if residual_report %}
+    <div class="info-panel">
+        <h3>Остатки прогноза</h3>
+        <p>Остаток считается как прогноз минус факт. Смещение около нуля означает, что модель не завышает и не занижает Sale систематически.</p>
+        <div class="metric-row">
+            <div class="metric-pill"><span>Средний остаток</span><strong>{{ residual_report.residual_mean }}</strong></div>
+            <div class="metric-pill"><span>Std остатка</span><strong>{{ residual_report.residual_std }}</strong></div>
+            <div class="metric-pill"><span>P50 abs error</span><strong>{{ residual_report.p50_abs_error }}</strong></div>
+            <div class="metric-pill"><span>P90 abs error</span><strong>{{ residual_report.p90_abs_error }}</strong></div>
+            <div class="metric-pill"><span>Max abs error</span><strong>{{ residual_report.max_abs_error }}</strong></div>
+            {% if residual_report.mape is not none %}
+                <div class="metric-pill"><span>MAPE</span><strong>{{ residual_report.mape }}%</strong></div>
+            {% endif %}
+        </div>
+    </div>
+{% endif %}
+
+{% if training_protocol %}
+    <div class="info-panel">
+        <h3>Протокол обучения</h3>
+        <ol class="protocol-list">
+            {% for step in training_protocol %}
+                <li class="protocol-step protocol-{{ step.status }}">
+                    <div>
+                        <strong>{{ step.title }}</strong>
+                        <span>{{ step.detail }}</span>
+                    </div>
+                    <em>{{ step.duration_seconds }} c</em>
+                </li>
+            {% endfor %}
+        </ol>
+    </div>
+{% endif %}

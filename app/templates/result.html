@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}Результаты обучения{% endblock %}
+
+{% block content %}
+<section class="dashboard-section">
+    <div class="page-header">
+        <div>
+            <h2>Результаты обучения</h2>
+            <p>Модель сохранена в каталоге артефактов и готова для ручного прогноза.</p>
+        </div>
+    </div>
+
+    <div class="info-panel">
+        <dl class="definition-list">
+            {% if training_id %}
+                <dt>ID обучения</dt>
+                <dd><a href="{{ url_for('main.trained_model_detail', training_id=training_id) }}">#{{ training_id }}</a></dd>
+            {% endif %}
+            <dt>Источник данных</dt>
+            <dd>{{ source_name }}</dd>
+            <dt>Модель</dt>
+            <dd>{{ model_title }}</dd>
+            <dt>Количество строк</dt>
+            <dd>{{ rows_count }}</dd>
+            <dt>Train/Test</dt>
+            <dd>{{ train_size }} / {{ test_size }}</dd>
+            <dt>Столбцы</dt>
+            <dd>{{ columns | join(', ') }}</dd>
+            {% if parameters %}
+                <dt>Параметры</dt>
+                <dd>
+                    {% for key, value in parameters.items() %}
+                        {{ key }}={{ value }}{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                </dd>
+            {% endif %}
+        </dl>
+    </div>
+
+    <div class="result-panel">
+        <h3>Метрики качества</h3>
+        <div class="metric-row">
+            <div class="metric-pill"><span>R²</span><strong>{{ metrics.r2 }}</strong></div>
+            <div class="metric-pill"><span>MAE</span><strong>{{ metrics.mae }}</strong></div>
+            <div class="metric-pill"><span>RMSE</span><strong>{{ metrics.rmse }}</strong></div>
+        </div>
+        {% if cv_metrics %}
+            <p class="panel-note">Cross-validation R²: {{ cv_metrics.r2_mean }} ± {{ cv_metrics.r2_std }}</p>
+        {% endif %}
+    </div>
+
+    {% set test_metrics = metrics %}
+    {% include "_ml_evaluation.html" %}
+
+    {% if dataset_profile %}
+        <div class="info-panel">
+            <h3>Качество датасета</h3>
+            <div class="metric-row">
+                <div class="metric-pill"><span>Строк</span><strong>{{ dataset_profile.row_count }}</strong></div>
+                <div class="metric-pill"><span>Столбцов</span><strong>{{ dataset_profile.column_count }}</strong></div>
+                <div class="metric-pill"><span>Проверка</span><strong>{{ "OK" if dataset_profile.is_valid else "Ошибки" }}</strong></div>
+            </div>
+            {% if dataset_profile.issues %}
+                <div class="quality-list">
+                    {% for issue in dataset_profile.issues %}
+                        <div class="quality-item quality-{{ issue.severity }}">{{ issue.message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    {% if coefficients %}
+        <div class="info-panel">
+            <h3>Важность признаков линейной модели</h3>
+            <p>Показаны стандартизированные коэффициенты: чем больше модуль, тем сильнее вклад признака.</p>
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Признак</th>
+                            <th>Коэффициент</th>
+                            <th>|Коэффициент|</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in coefficients %}
+                            <tr>
+                                <td>{{ item.label }}</td>
+                                <td>{{ item.coefficient }}</td>
+                                <td>{{ item.abs_coefficient }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
+
+    {% if loss_chart %}
+        <div class="chart-card">
+            <div class="chart-header">
+                <div>
+                    <h3>MLP loss</h3>
+                    <p>График обучения с ранней остановкой по validation loss.</p>
+                </div>
+                <span>epoch {{ loss_chart.stopped_epoch }}</span>
+            </div>
+
+            <svg class="chart-svg" viewBox="0 0 420 230" role="img" aria-label="MLP loss">
+                <line class="chart-axis" x1="48" y1="190" x2="390" y2="190"></line>
+                <line class="chart-axis" x1="48" y1="190" x2="48" y2="24"></line>
+                <polyline class="loss-line-train" points="{{ loss_chart.train_points }}"></polyline>
+                {% if loss_chart.val_points %}
+                    <polyline class="loss-line-val" points="{{ loss_chart.val_points }}"></polyline>
+                {% endif %}
+                <text class="chart-label" x="48" y="212">1</text>
+                <text class="chart-label" x="360" y="212">{{ loss_chart.max_epoch }}</text>
+                <text class="chart-label" x="8" y="190">{{ loss_chart.axis_min }}</text>
+                <text class="chart-label" x="8" y="30">{{ loss_chart.axis_max }}</text>
+            </svg>
+            <div class="chart-legend">
+                <span><i class="legend-train"></i>train loss</span>
+                <span><i class="legend-val"></i>validation loss</span>
+            </div>
+        </div>
+    {% endif %}
+
+    {% if diagnostics %}
+        <div class="chart-grid">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div>
+                        <h3>Факт vs прогноз</h3>
+                        <p>Точки ближе к диагонали означают меньшую ошибку на тестовой выборке.</p>
+                    </div>
+                    <span>{{ diagnostics.summary.shown_points_count }} / {{ diagnostics.summary.points_count }} точек</span>
+                </div>
+
+                <svg class="chart-svg" viewBox="0 0 420 260" role="img" aria-label="Факт против прогноза">
+                    <line class="chart-axis" x1="52" y1="220" x2="390" y2="220"></line>
+                    <line class="chart-axis" x1="52" y1="220" x2="52" y2="24"></line>
+                    <line class="chart-ideal-line"
+                          x1="{{ diagnostics.scatter.ideal_line.x1 }}"
+                          y1="{{ diagnostics.scatter.ideal_line.y1 }}"
+                          x2="{{ diagnostics.scatter.ideal_line.x2 }}"
+                          y2="{{ diagnostics.scatter.ideal_line.y2 }}"></line>
+                    {% for point in diagnostics.scatter.points %}
+                        <circle class="scatter-point" cx="{{ point.x }}" cy="{{ point.y }}" r="3">
+                            <title>Факт: {{ point.actual }}, прогноз: {{ point.predicted }}</title>
+                        </circle>
+                    {% endfor %}
+                    <text class="chart-label" x="52" y="242">{{ diagnostics.scatter.axis_min }}</text>
+                    <text class="chart-label" x="354" y="242">{{ diagnostics.scatter.axis_max }}</text>
+                    <text class="chart-label" x="14" y="224">{{ diagnostics.scatter.axis_min }}</text>
+                    <text class="chart-label" x="14" y="30">{{ diagnostics.scatter.axis_max }}</text>
+                    <text class="chart-axis-title" x="185" y="255">Факт</text>
+                    <text class="chart-axis-title" x="16" y="130" transform="rotate(-90 16 130)">Прогноз</text>
+                </svg>
+            </div>
+
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div>
+                        <h3>Распределение ошибки</h3>
+                        <p>Остаток считается как прогноз минус фактическое значение Sale.</p>
+                    </div>
+                    <span>MAE: {{ diagnostics.summary.avg_abs_error }}</span>
+                </div>
+
+                <svg class="chart-svg" viewBox="0 0 420 240" role="img" aria-label="Гистограмма ошибок">
+                    <line class="chart-axis" x1="46" y1="198" x2="386" y2="198"></line>
+                    <line class="chart-zero-line" x1="216" y1="30" x2="216" y2="198"></line>
+                    {% for bin in diagnostics.histogram.bins %}
+                        <rect class="histogram-bar"
+                              x="{{ bin.x }}"
+                              y="{{ bin.y }}"
+                              width="{{ bin.width }}"
+                              height="{{ bin.height }}">
+                            <title>{{ bin.label }}: {{ bin.count }}</title>
+                        </rect>
+                    {% endfor %}
+                    <text class="chart-label" x="42" y="220">-{{ diagnostics.histogram.max_abs_residual }}</text>
+                    <text class="chart-label" x="208" y="220">0</text>
+                    <text class="chart-label" x="322" y="220">{{ diagnostics.histogram.max_abs_residual }}</text>
+                    <text class="chart-axis-title" x="158" y="235">Ошибка прогноза</text>
+                </svg>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="actions-row">
+        <a class="button button-secondary" href="{{ url_for('main.upload') }}">Обучить другую модель</a>
+        <a class="button" href="{{ url_for('main.predict_page') }}">Перейти к прогнозу</a>
+        {% if training_id %}
+            <a class="button button-secondary" href="{{ url_for('main.trained_model_detail', training_id=training_id) }}">Открыть отчёт модели</a>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

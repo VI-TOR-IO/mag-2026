@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block title %}Обучение модели{% endblock %}
+
+{% block content %}
+<section class="dashboard-section">
+    <div class="page-header">
+        <div>
+            <h2>Обучение модели</h2>
+            <p>Перед обучением можно посмотреть структуру CSV, первые строки и предупреждения по качеству данных.</p>
+        </div>
+    </div>
+
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    <div class="info-strip">
+        <div>
+            <strong>Что будет проверено</strong>
+            <span>структура CSV, обязательные признаки, числовые значения, диапазоны Discount и StockRate</span>
+        </div>
+        <div>
+            <strong>Что сохранится</strong>
+            <span>модель, скейлеры, метрики test/train, baseline, CV, остатки и протокол обучения</span>
+        </div>
+        <div>
+            <strong>После обучения</strong>
+            <span>модель станет доступной на странице ручного прогноза при наличии активных артефактов</span>
+        </div>
+    </div>
+
+    <form class="panel" id="training-form" method="POST" enctype="multipart/form-data">
+        <div class="panel-heading">
+            <div>
+                <h3>Параметры обучения</h3>
+                <p>Для первого запуска используйте встроенный датасет и линейную регрессию как проверочную базу.</p>
+            </div>
+        </div>
+
+        <div class="form-grid">
+            <div class="form-field">
+                <label for="preset_dataset">Предустановленный датасет</label>
+                <select name="preset_dataset" id="preset_dataset">
+                    <option value="">Не использовать</option>
+                    {% for key, dataset in preset_datasets.items() %}
+                        <option value="{{ key }}">{{ dataset.title }}</option>
+                    {% endfor %}
+                </select>
+                <small>Если выбран датасет, загруженный файл игнорируется.</small>
+            </div>
+
+            <div class="form-field">
+                <label for="dataset">CSV-файл</label>
+                <input type="file" name="dataset" id="dataset" accept=".csv">
+            </div>
+
+            <div class="form-field">
+                <label class="label-with-help" for="model_name">
+                    <span>Модель</span>
+                    <span class="help-anchor" tabindex="0" aria-label="Подсказка по выбору модели">?</span>
+                    <span class="help-popover" role="tooltip">
+                        Линейная регрессия подходит как быстрый базовый вариант. KNN полезен для проверки похожих наблюдений. MLP имеет смысл, если нужен более гибкий метод и допустимо более долгое обучение.
+                    </span>
+                </label>
+                <select name="model_name" id="model_name" required>
+                    {% for key, title in model_options.items() %}
+                        <option value="{{ key }}" {% if selected_model == key %}selected{% endif %}>{{ title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-field">
+                <label class="label-with-help" for="knn_neighbors">
+                    <span>KNN: количество соседей</span>
+                    <span class="help-anchor" tabindex="0" aria-label="Подсказка по KNN">?</span>
+                    <span class="help-popover" role="tooltip">
+                        Параметр K задаёт, сколько ближайших строк участвует в прогнозе. Рекомендуемый старт: 5. Меньшие значения чувствительнее к шуму, большие дают более сглаженный прогноз.
+                    </span>
+                </label>
+                <input type="number" min="1" max="50" name="knn_neighbors" id="knn_neighbors" value="{{ selected_knn_neighbors or 5 }}">
+            </div>
+
+            <div class="form-field">
+                <label class="label-with-help" for="mlp_epochs">
+                    <span>MLP: максимум эпох</span>
+                    <span class="help-anchor" tabindex="0" aria-label="Подсказка по эпохам MLP">?</span>
+                    <span class="help-popover" role="tooltip">
+                        Эпоха — один полный проход нейросети по train-данным. Рекомендуемый старт: 300. Если loss-график не успевает стабилизироваться, увеличьте значение.
+                    </span>
+                </label>
+                <input type="number" min="20" max="2000" name="mlp_epochs" id="mlp_epochs" value="{{ selected_mlp_epochs or 300 }}">
+            </div>
+
+            <div class="form-field">
+                <label class="label-with-help" for="mlp_patience">
+                    <span>MLP: patience</span>
+                    <span class="help-anchor" tabindex="0" aria-label="Подсказка по patience MLP">?</span>
+                    <span class="help-popover" role="tooltip">
+                        Patience — сколько эпох ждать улучшения validation loss перед ранней остановкой. Рекомендуемый старт: 25. Увеличивайте, если обучение останавливается слишком рано.
+                    </span>
+                </label>
+                <input type="number" min="5" max="200" name="mlp_patience" id="mlp_patience" value="{{ selected_mlp_patience or 25 }}">
+            </div>
+        </div>
+
+        <div class="actions-row">
+            <button type="submit" name="action" value="preview" class="button-secondary">Предпросмотр CSV</button>
+            <button type="submit" name="action" value="train">Обучить модель</button>
+        </div>
+
+        <div class="training-overlay" id="training-progress" hidden aria-live="polite">
+            <div class="training-progress-header">
+                <strong>Идет обучение модели</strong>
+                <span>После завершения откроется отчет качества</span>
+            </div>
+            <ol class="training-step-list">
+                <li>Загрузка и проверка датасета</li>
+                <li>Train/test split и масштабирование</li>
+                <li>Обучение выбранной модели</li>
+                <li>Расчет baseline, метрик и остатков</li>
+                <li>Сохранение артефактов и отчета</li>
+            </ol>
+        </div>
+    </form>
+
+    {% if dataset_profile %}
+        <div class="info-panel">
+            <div class="panel-heading">
+                <div>
+                    <h3>Профиль датасета{% if source_name %}: {{ source_name }}{% endif %}</h3>
+                    <p>Профиль показывает, можно ли безопасно запускать обучение и какие столбцы требуют внимания.</p>
+                </div>
+                {% if dataset_profile.is_valid %}
+                    <span class="status-badge status-success">готов к обучению</span>
+                {% else %}
+                    <span class="status-badge status-error">есть ошибки</span>
+                {% endif %}
+            </div>
+            <div class="metric-row">
+                <div class="metric-pill"><span>Строк</span><strong>{{ dataset_profile.row_count }}</strong></div>
+                <div class="metric-pill"><span>Столбцов</span><strong>{{ dataset_profile.column_count }}</strong></div>
+                <div class="metric-pill"><span>Статус</span><strong>{{ "OK" if dataset_profile.is_valid else "Есть ошибки" }}</strong></div>
+                <div class="metric-pill"><span>Замечаний</span><strong>{{ dataset_profile.issues | length }}</strong></div>
+            </div>
+
+            {% if dataset_profile.issues %}
+                <div class="quality-list">
+                    {% for issue in dataset_profile.issues %}
+                        <div class="quality-item quality-{{ issue.severity }}">{{ issue.message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Столбец</th>
+                        <th>Тип</th>
+                        <th>Пустые</th>
+                        <th>Нечисловые</th>
+                        <th>Min</th>
+                        <th>Mean</th>
+                        <th>Max</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for column in dataset_profile.column_profiles %}
+                        <tr>
+                            <td>{{ column.name }}</td>
+                            <td>{{ column.dtype }}</td>
+                            <td>{{ column.missing }}</td>
+                            <td>{{ column.non_numeric }}</td>
+                            <td>{{ column.min }}</td>
+                            <td>{{ column.mean }}</td>
+                            <td>{{ column.max }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        {% for column in dataset_profile.preview_columns %}
+                            <th>{{ column }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in dataset_profile.preview_rows %}
+                        <tr>
+                            {% for column in dataset_profile.preview_columns %}
+                                <td>{{ row[column] }}</td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</section>
+
+<script>
+    const trainingForm = document.getElementById("training-form");
+    const progressPanel = document.getElementById("training-progress");
+
+    if (trainingForm && progressPanel) {
+        trainingForm.addEventListener("submit", (event) => {
+            const submitter = event.submitter;
+            if (!submitter || submitter.value !== "train") {
+                return;
+            }
+
+            progressPanel.hidden = false;
+            submitter.disabled = true;
+            submitter.textContent = "Обучение...";
+        });
+    }
+</script>
+{% endblock %}

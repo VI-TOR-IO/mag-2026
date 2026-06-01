@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Модели{% endblock %}
+
+{% block content %}
+<section class="dashboard-section">
+    <div class="page-header">
+        <div>
+            <h2>История обучений</h2>
+            <p>Каждое обучение сохраняется как отдельная версия с метриками, параметрами и путями к артефактам.</p>
+        </div>
+        <div class="actions-row">
+            <a class="button button-secondary" href="{{ url_for('main.export_models_csv') }}">Экспорт CSV</a>
+            <a class="button" href="{{ url_for('main.upload') }}">Новое обучение</a>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <h3>Всего обучений</h3>
+            <div class="metric-row">
+                <div class="metric-pill"><span>Запусков</span><strong>{{ stats.total_training_runs }}</strong></div>
+            </div>
+            <p>Каждый запуск хранит параметры, датасет, метрики, артефакты и диагностический отчет.</p>
+        </div>
+
+        <div class="dashboard-card">
+            <h3>Средние ошибки</h3>
+            {% if stats.avg_errors %}
+                <div class="bar-list">
+                    {% for row in stats.avg_errors %}
+                        <svg class="mini-bar-svg" viewBox="0 0 420 34" role="img" aria-label="{{ row.model_title }}">
+                            <text class="chart-row-label" x="0" y="21">{{ row.model_title }}</text>
+                            <rect class="mini-bar-track" x="170" y="9" width="220" height="14"></rect>
+                            <rect class="mini-bar-fill mini-bar-warning" x="170" y="9" width="{{ (row.avg_rmse / stats.avg_errors[-1].avg_rmse * 220) if stats.avg_errors[-1].avg_rmse else 0 }}" height="14"></rect>
+                            <text class="chart-value-label" x="330" y="21">RMSE {{ "%.0f"|format(row.avg_rmse) }}</text>
+                        </svg>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p>Нет данных.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="info-strip">
+        <div>
+            <strong>R²</strong>
+            <span>показывает, какую долю вариации Sale объясняет модель; выше лучше</span>
+        </div>
+        <div>
+            <strong>RMSE</strong>
+            <span>сильнее штрафует крупные ошибки прогноза; ниже лучше</span>
+        </div>
+        <div>
+            <strong>CV R²</strong>
+            <span>оценивает устойчивость качества на разных разбиениях данных</span>
+        </div>
+    </div>
+
+    {% if rows %}
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Дата</th>
+                        <th>Модель</th>
+                        <th>Датасет</th>
+                        <th>Строки</th>
+                        <th>R²</th>
+                        <th>CV R²</th>
+                        <th>MAE</th>
+                        <th>RMSE</th>
+                        <th>Вердикт</th>
+                        <th>Baseline</th>
+                        <th>Отчёт</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                        <tr>
+                            <td>{{ row["id"] }}</td>
+                            <td>{{ row["created_at"] }}</td>
+                            <td>{{ row["model_title"] }}</td>
+                            <td>{{ row["dataset_name"] }}</td>
+                            <td>{{ row["rows_count"] }}</td>
+                            <td>{{ row["metrics_r2"] }}</td>
+                            <td>
+                                {% if row["cv_r2_mean"] is not none %}
+                                    {{ row["cv_r2_mean"] }} ± {{ row["cv_r2_std"] }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ row["metrics_mae"] }}</td>
+                            <td>{{ row["metrics_rmse"] }}</td>
+                            <td>
+                                {% if row["verdict_label"] %}
+                                    {% if row["verdict"] == "good" %}
+                                        <span class="status-badge status-success">{{ row["verdict_label"] }}</span>
+                                    {% elif row["verdict"] == "warning" %}
+                                        <span class="status-badge status-warning">{{ row["verdict_label"] }}</span>
+                                    {% else %}
+                                        <span class="status-badge status-error">{{ row["verdict_label"] }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if row["baseline_improvement_percent"] is not none %}
+                                    {{ row["baseline_improvement_percent"] }}%
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td><a href="{{ url_for('main.trained_model_detail', training_id=row['id']) }}">Открыть</a></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty-state">История обучения пока пуста. Запустите обучение модели на странице «Обучение».</div>
+    {% endif %}
+</section>
+{% endblock %}
