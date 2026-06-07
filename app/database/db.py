@@ -94,6 +94,7 @@ def init_db(
             residual_report TEXT,
             adequacy_report TEXT,
             training_protocol TEXT,
+            hyperparameter_search_report TEXT,
             created_at TEXT NOT NULL
         )
     """)
@@ -103,6 +104,7 @@ def init_db(
     ensure_column(cursor, "model_training_history", "residual_report", "TEXT")
     ensure_column(cursor, "model_training_history", "adequacy_report", "TEXT")
     ensure_column(cursor, "model_training_history", "training_protocol", "TEXT")
+    ensure_column(cursor, "model_training_history", "hyperparameter_search_report", "TEXT")
 
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_prediction_history_created_at
@@ -408,6 +410,7 @@ def save_training_run(
     residual_report: str | None = None,
     adequacy_report: str | None = None,
     training_protocol: str | None = None,
+    hyperparameter_search_report: str | None = None,
 ) -> int:
     conn = get_connection(db_path)
     cursor = conn.cursor()
@@ -439,9 +442,10 @@ def save_training_run(
             residual_report,
             adequacy_report,
             training_protocol,
+            hyperparameter_search_report,
             created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         model_name,
         model_title,
@@ -468,6 +472,7 @@ def save_training_run(
         residual_report,
         adequacy_report,
         training_protocol,
+        hyperparameter_search_report,
         now_string(),
     ))
 

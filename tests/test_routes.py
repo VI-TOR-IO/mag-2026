@@ -216,6 +216,7 @@ class RoutesTestCase(unittest.TestCase):
                 residual_report='{"residual_mean": 0, "residual_std": 2, "p50_abs_error": 4, "p90_abs_error": 8, "max_abs_error": 12, "mape": 5}',
                 adequacy_report='{"verdict": "good", "verdict_label": "Адекватна", "summary": "OK", "baseline_improvement_percent": 70, "train_test_r2_gap": 0.05, "checks": []}',
                 training_protocol='[{"title": "Обучение", "detail": "Готово", "status": "success", "duration_seconds": 0.1}]',
+                hyperparameter_search_report='{"enabled": true, "mode_title": "Быстрый поиск", "metric": "validation R2", "best_parameters": {"alpha": 1.0}, "best_score": 0.7, "best_rmse": 1.2, "candidates_count": 2, "successful_candidates_count": 2, "candidates": []}',
             )
 
         self.login()
@@ -224,6 +225,7 @@ class RoutesTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Проверка адекватности модели".encode("utf-8"), response.data)
         self.assertIn("Протокол обучения".encode("utf-8"), response.data)
+        self.assertIn("Автоподбор гиперпараметров".encode("utf-8"), response.data)
 
 
 if __name__ == "__main__":

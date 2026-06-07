@@ -50,6 +50,8 @@
         {% endif %}
     </div>
 
+    {% include "_hyperparameter_search.html" %}
+
     {% set test_metrics = metrics %}
     {% include "_ml_evaluation.html" %}
 

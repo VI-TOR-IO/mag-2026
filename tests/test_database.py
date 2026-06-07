@@ -83,6 +83,7 @@ class DatabaseTestCase(unittest.TestCase):
             residual_report='{"p90_abs_error": 5}',
             adequacy_report='{"verdict": "good"}',
             training_protocol='[{"title": "done"}]',
+            hyperparameter_search_report='{"enabled": true}',
         )
 
         row = get_training_by_id(self.db_path, training_id)
@@ -92,6 +93,7 @@ class DatabaseTestCase(unittest.TestCase):
         self.assertEqual(row["metrics_rmse"], 12)
         self.assertEqual(row["adequacy_report"], '{"verdict": "good"}')
         self.assertEqual(row["training_protocol"], '[{"title": "done"}]')
+        self.assertEqual(row["hyperparameter_search_report"], '{"enabled": true}')
         self.assertEqual(len(rows), 1)
 
     def test_delete_prediction_by_id(self):

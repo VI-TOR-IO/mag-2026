@@ -22,7 +22,7 @@
         </div>
         <div>
             <strong>Что сохранится</strong>
-            <span>модель, скейлеры, метрики test/train, baseline, CV, остатки и протокол обучения</span>
+            <span>модель, скейлеры, метрики test/train, baseline, CV, автоподбор, остатки и протокол</span>
         </div>
         <div>
             <strong>После обучения</strong>
@@ -71,6 +71,21 @@
             </div>
 
             <div class="form-field">
+                <label class="label-with-help" for="hyperparameter_search">
+                    <span>Автоподбор гиперпараметров</span>
+                    <span class="help-anchor" tabindex="0" aria-label="Подсказка по автоподбору">?</span>
+                    <span class="help-popover" role="tooltip">
+                        Поиск выполняется на внутреннем validation-разбиении внутри train. Test-выборка остается только для итоговой оценки качества.
+                    </span>
+                </label>
+                <select name="hyperparameter_search" id="hyperparameter_search">
+                    {% for key, item in search_mode_options.items() %}
+                        <option value="{{ key }}" {% if selected_hyperparameter_search == key %}selected{% endif %}>{{ item.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-field">
                 <label class="label-with-help" for="knn_neighbors">
                     <span>KNN: количество соседей</span>
                     <span class="help-anchor" tabindex="0" aria-label="Подсказка по KNN">?</span>
@@ -79,6 +94,34 @@
                     </span>
                 </label>
                 <input type="number" min="1" max="50" name="knn_neighbors" id="knn_neighbors" value="{{ selected_knn_neighbors or 5 }}">
+            </div>
+
+            <div class="form-field">
+                <label class="label-with-help" for="knn_weights">
+                    <span>KNN: веса соседей</span>
+                    <span class="help-anchor" tabindex="0" aria-label="Подсказка по весам KNN">?</span>
+                    <span class="help-popover" role="tooltip">
+                        uniform учитывает всех выбранных соседей одинаково. distance дает больший вес ближайшим строкам и часто полезен, если похожие наблюдения должны сильнее влиять на прогноз.
+                    </span>
+                </label>
+                <select name="knn_weights" id="knn_weights">
+                    <option value="uniform" {% if (selected_knn_weights or "uniform") == "uniform" %}selected{% endif %}>uniform</option>
+                    <option value="distance" {% if selected_knn_weights == "distance" %}selected{% endif %}>distance</option>
+                </select>
+            </div>
+
+            <div class="form-field">
+                <label class="label-with-help" for="knn_p">
+                    <span>KNN: метрика расстояния</span>
+                    <span class="help-anchor" tabindex="0" aria-label="Подсказка по метрике расстояния KNN">?</span>
+                    <span class="help-popover" role="tooltip">
+                        Euclidean измеряет обычное геометрическое расстояние. Manhattan суммирует различия по признакам и может быть устойчивее, если признаки меняются независимо.
+                    </span>
+                </label>
+                <select name="knn_p" id="knn_p">
+                    <option value="2" {% if (selected_knn_p or 2) == 2 %}selected{% endif %}>Euclidean</option>
+                    <option value="1" {% if selected_knn_p == 1 %}selected{% endif %}>Manhattan</option>
+                </select>
             </div>
 
             <div class="form-field">
@@ -117,6 +160,7 @@
             <ol class="training-step-list">
                 <li>Загрузка и проверка датасета</li>
                 <li>Train/test split и масштабирование</li>
+                <li>Автоматический подбор гиперпараметров, если включен</li>
                 <li>Обучение выбранной модели</li>
                 <li>Расчет baseline, метрик и остатков</li>
                 <li>Сохранение артефактов и отчета</li>

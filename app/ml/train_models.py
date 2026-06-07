@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import Ridge
 from sklearn.neighbors import KNeighborsRegressor
 
 
@@ -10,8 +11,14 @@ def train_linear_regression(X_train, y_train):
     return model
 
 
-def train_knn(X_train, y_train, n_neighbors: int = 5):
-    model = KNeighborsRegressor(n_neighbors=n_neighbors)
+def train_ridge_regression(X_train, y_train, alpha: float = 1.0):
+    model = Ridge(alpha=alpha)
+    model.fit(X_train, y_train)
+    return model
+
+
+def train_knn(X_train, y_train, n_neighbors: int = 5, weights: str = "uniform", p: int = 2):
+    model = KNeighborsRegressor(n_neighbors=n_neighbors, weights=weights, p=p)
     model.fit(X_train, y_train)
     return model
 

@@ -1,0 +1,86 @@
+{% if hyperparameter_search_report and (hyperparameter_search_report.enabled or hyperparameter_search_report.warning) %}
+    <div class="info-panel">
+        <div class="panel-heading">
+            <div>
+                <h3>Автоподбор гиперпараметров</h3>
+                <p>{{ hyperparameter_search_report.mode_title }}{% if hyperparameter_search_report.metric %} · {{ hyperparameter_search_report.metric }}{% endif %}</p>
+            </div>
+            {% if hyperparameter_search_report.enabled %}
+                <span class="status-badge status-success">применен</span>
+            {% elif hyperparameter_search_report.warning %}
+                <span class="status-badge status-warning">пропущен</span>
+            {% else %}
+                <span class="status-badge status-missing">выключен</span>
+            {% endif %}
+        </div>
+
+        {% if hyperparameter_search_report.warning %}
+            <div class="quality-item quality-warning">
+                <strong>Предупреждение</strong>
+                <span>{{ hyperparameter_search_report.warning }}</span>
+            </div>
+        {% endif %}
+
+        {% if hyperparameter_search_report.enabled %}
+            <div class="metric-row">
+                <div class="metric-pill"><span>Кандидатов</span><strong>{{ hyperparameter_search_report.successful_candidates_count }} / {{ hyperparameter_search_report.candidates_count }}</strong></div>
+                <div class="metric-pill"><span>Best validation R²</span><strong>{{ hyperparameter_search_report.best_score }}</strong></div>
+                <div class="metric-pill"><span>Best validation RMSE</span><strong>{{ hyperparameter_search_report.best_rmse }}</strong></div>
+            </div>
+
+            <div class="table-wrapper">
+                <table class="data-table compact-table">
+                    <thead>
+                        <tr>
+                            <th>Параметр</th>
+                            <th>Значение</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for key, value in hyperparameter_search_report.best_parameters.items() %}
+                            <tr>
+                                <td>{{ key }}</td>
+                                <td>{{ value }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if hyperparameter_search_report.candidates %}
+                <div class="table-wrapper">
+                    <table class="data-table compact-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>R²</th>
+                                <th>MAE</th>
+                                <th>RMSE</th>
+                                <th>Параметры</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for candidate in hyperparameter_search_report.candidates[:5] %}
+                                <tr>
+                                    <td>{{ candidate.index }}</td>
+                                    <td>{{ candidate.r2 if candidate.r2 is defined else "-" }}</td>
+                                    <td>{{ candidate.mae if candidate.mae is defined else "-" }}</td>
+                                    <td>{{ candidate.rmse if candidate.rmse is defined else "-" }}</td>
+                                    <td>
+                                        {% if candidate.error is defined %}
+                                            {{ candidate.error }}
+                                        {% else %}
+                                            {% for key, value in candidate.parameters.items() %}
+                                                {{ key }}={{ value }}{% if not loop.last %}, {% endif %}
+                                            {% endfor %}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
+        {% endif %}
+    </div>
+{% endif %}

@@ -45,6 +45,43 @@
             </div>
 
             <div class="form-field">
+                <label for="hyperparameter_search">Автоподбор гиперпараметров</label>
+                <select name="hyperparameter_search" id="hyperparameter_search">
+                    {% for key, item in search_mode_options.items() %}
+                        <option value="{{ key }}" {% if selected_hyperparameter_search == key %}selected{% endif %}>{{ item.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-field">
+                <label class="label-with-help" for="knn_weights">
+                    <span>KNN: веса соседей</span>
+                    <span class="help-anchor" tabindex="0" aria-label="Подсказка по весам KNN">?</span>
+                    <span class="help-popover" role="tooltip">
+                        uniform — одинаковый вклад соседей. distance — ближайшие строки получают больший вес.
+                    </span>
+                </label>
+                <select name="knn_weights" id="knn_weights">
+                    <option value="uniform" {% if (selected_knn_weights or "uniform") == "uniform" %}selected{% endif %}>uniform</option>
+                    <option value="distance" {% if selected_knn_weights == "distance" %}selected{% endif %}>distance</option>
+                </select>
+            </div>
+
+            <div class="form-field">
+                <label class="label-with-help" for="knn_p">
+                    <span>KNN: метрика расстояния</span>
+                    <span class="help-anchor" tabindex="0" aria-label="Подсказка по метрике KNN">?</span>
+                    <span class="help-popover" role="tooltip">
+                        Euclidean подходит как стандартный вариант. Manhattan суммирует различия по признакам и иногда устойчивее к отдельным скачкам.
+                    </span>
+                </label>
+                <select name="knn_p" id="knn_p">
+                    <option value="2" {% if (selected_knn_p or 2) == 2 %}selected{% endif %}>Euclidean</option>
+                    <option value="1" {% if selected_knn_p == 1 %}selected{% endif %}>Manhattan</option>
+                </select>
+            </div>
+
+            <div class="form-field">
                 <label for="mlp_epochs">MLP: максимум эпох</label>
                 <input type="number" min="20" max="2000" name="mlp_epochs" id="mlp_epochs" value="{{ selected_mlp_epochs or 300 }}">
             </div>
@@ -72,6 +109,10 @@
         <div>
             <strong>MLP</strong>
             <span>гибкая нейросетевая модель, которой нужны стабильные данные и контроль переобучения</span>
+        </div>
+        <div>
+            <strong>Автоподбор</strong>
+            <span>если включен, каждая модель получает собственную лучшую конфигурацию перед сравнением</span>
         </div>
     </div>
 
@@ -209,6 +250,7 @@
                         <th>CV R²</th>
                         <th>MAE</th>
                         <th>RMSE</th>
+                        <th>Автоподбор</th>
                         <th>Комментарий</th>
                     </tr>
                 </thead>
@@ -226,6 +268,13 @@
                             </td>
                             <td>{{ row.mae }}</td>
                             <td>{{ row.rmse }}</td>
+                            <td>
+                                {% if row.search_enabled %}
+                                    {{ row.search_candidates_count }} кандидатов · R² {{ row.search_best_score }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
                             <td>
                                 {% if row.model == best_model.model %}
                                     Лучшая модель по R²

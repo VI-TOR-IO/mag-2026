@@ -74,6 +74,7 @@
                         <th>RMSE</th>
                         <th>Вердикт</th>
                         <th>Baseline</th>
+                        <th>Автоподбор</th>
                         <th>Отчёт</th>
                     </tr>
                 </thead>
@@ -111,6 +112,13 @@
                             <td>
                                 {% if row["baseline_improvement_percent"] is not none %}
                                     {{ row["baseline_improvement_percent"] }}%
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if row["search_enabled"] %}
+                                    {{ row["search_mode_title"] }}
                                 {% else %}
                                     -
                                 {% endif %}

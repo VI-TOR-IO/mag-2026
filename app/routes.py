@@ -33,6 +33,7 @@ from app.database.db import (
     save_training_run,
 )
 from app.decorators import login_required, role_required
+from app.ml.hyperparameter_search import SEARCH_MODE_OPTIONS, normalize_search_mode
 
 main_bp = Blueprint("main", __name__)
 
@@ -219,15 +220,24 @@ def parse_positive_int(value: str | None, default: int, minimum: int, maximum: i
 def parse_training_options(form):
     return {
         "knn_neighbors": parse_positive_int(form.get("knn_neighbors"), 5, 1, 50, "Количество соседей KNN"),
+        "knn_weights": form.get("knn_weights", "uniform") if form.get("knn_weights", "uniform") in {"uniform", "distance"} else "uniform",
+        "knn_p": parse_positive_int(form.get("knn_p"), 2, 1, 2, "Метрика расстояния KNN"),
         "mlp_epochs": parse_positive_int(form.get("mlp_epochs"), 300, 20, 2000, "Количество эпох MLP"),
         "mlp_patience": parse_positive_int(form.get("mlp_patience"), 25, 5, 200, "Patience MLP"),
         "mlp_learning_rate": 0.001,
+        "hyperparameter_search": normalize_search_mode(form.get("hyperparameter_search", "none")),
     }
 
 
 def model_parameters(model_name: str, options: dict):
+    search_mode = options.get("hyperparameter_search", "none")
     if model_name == "knn":
-        return {"n_neighbors": options["knn_neighbors"]}
+        return {
+            "n_neighbors": options["knn_neighbors"],
+            "weights": options.get("knn_weights", "uniform"),
+            "p": options.get("knn_p", 2),
+            "hyperparameter_search": search_mode,
+        }
     if model_name == "mlp":
         return {
             "epochs": options["mlp_epochs"],
@@ -235,19 +245,34 @@ def model_parameters(model_name: str, options: dict):
             "learning_rate": options["mlp_learning_rate"],
             "early_stopping": True,
             "seed": 42,
+            "hyperparameter_search": search_mode,
         }
-    return {}
+    return {
+        "estimator": options.get("linear_estimator", "linear"),
+        "alpha": options.get("alpha"),
+        "hyperparameter_search": search_mode,
+    }
 
 
 def train_model(model_name: str, X_train, y_train, options: dict | None = None, validation_data=None):
-    from app.ml.train_models import train_knn, train_linear_regression, train_mlp
+    from app.ml.train_models import train_knn, train_linear_regression, train_mlp, train_ridge_regression
 
     options = options or {}
 
     if model_name == "linear":
+        estimator = options.get("linear_estimator", "linear")
+        if estimator == "ridge":
+            return train_ridge_regression(X_train, y_train, alpha=options.get("alpha", 1.0)), None
         return train_linear_regression(X_train, y_train), None
     if model_name == "knn":
-        return train_knn(X_train, y_train, n_neighbors=options.get("knn_neighbors", 5)), None
+        safe_neighbors = max(1, min(options.get("knn_neighbors", 5), len(X_train)))
+        return train_knn(
+            X_train,
+            y_train,
+            n_neighbors=safe_neighbors,
+            weights=options.get("knn_weights", "uniform"),
+            p=options.get("knn_p", 2),
+        ), None
     if model_name == "mlp":
         model, loss_history = train_mlp(
             X_train,
@@ -382,6 +407,30 @@ def json_load(value, fallback):
         return json.loads(value)
     except json.JSONDecodeError:
         return fallback
+
+
+def safe_hyperparameter_search(model_name: str, X_train, y_train, options: dict, mode: str):
+    from app.ml.hyperparameter_search import run_hyperparameter_search
+
+    mode = normalize_search_mode(mode)
+    try:
+        return run_hyperparameter_search(
+            model_name=model_name,
+            X_train=X_train,
+            y_train=y_train,
+            options=options,
+            mode=mode,
+        )
+    except Exception as exc:
+        current_app.logger.exception("Hyperparameter search failed")
+        return {
+            "enabled": False,
+            "mode": mode,
+            "mode_title": SEARCH_MODE_OPTIONS[mode]["title"],
+            "best_parameters": {},
+            "candidates": [],
+            "warning": f"Автоподбор не выполнен: {exc}. Используются параметры из формы.",
+        }
 
 
 def add_training_protocol_step(protocol: list[dict], title: str, detail: str, started_at: float, status: str = "success"):
@@ -549,6 +598,7 @@ def upload():
                 error="Выберите корректную модель.",
                 preset_datasets=PRESET_DATASETS,
                 model_options=MODEL_OPTIONS,
+                search_mode_options=SEARCH_MODE_OPTIONS,
                 selected_model=model_name,
             )
 
@@ -579,10 +629,14 @@ def upload():
                     "upload.html",
                     preset_datasets=PRESET_DATASETS,
                     model_options=MODEL_OPTIONS,
+                    search_mode_options=SEARCH_MODE_OPTIONS,
                     selected_model=model_name,
                     selected_knn_neighbors=options["knn_neighbors"],
+                    selected_knn_weights=options["knn_weights"],
+                    selected_knn_p=options["knn_p"],
                     selected_mlp_epochs=options["mlp_epochs"],
                     selected_mlp_patience=options["mlp_patience"],
+                    selected_hyperparameter_search=options["hyperparameter_search"],
                     dataset_profile=dataset_profile,
                     source_name=source_name,
                 )
@@ -593,10 +647,14 @@ def upload():
                     error="Датасет содержит ошибки. Исправьте их перед обучением.",
                     preset_datasets=PRESET_DATASETS,
                     model_options=MODEL_OPTIONS,
+                    search_mode_options=SEARCH_MODE_OPTIONS,
                     selected_model=model_name,
                     selected_knn_neighbors=options["knn_neighbors"],
+                    selected_knn_weights=options["knn_weights"],
+                    selected_knn_p=options["knn_p"],
                     selected_mlp_epochs=options["mlp_epochs"],
                     selected_mlp_patience=options["mlp_patience"],
+                    selected_hyperparameter_search=options["hyperparameter_search"],
                     dataset_profile=dataset_profile,
                     source_name=source_name,
                 )
@@ -615,11 +673,46 @@ def upload():
                 step_started_at,
             )
             X_train, X_test, y_train, y_test, x_scaler, y_scaler = prepare_data(df)
+            if model_name == "knn":
+                options["knn_neighbors"] = max(1, min(options["knn_neighbors"], len(X_train)))
             step_started_at = add_training_protocol_step(
                 training_protocol,
                 "Разделение и масштабирование",
                 f"Train: {len(y_train)} строк, test: {len(y_test)} строк. Скейлеры обучены только на train.",
                 step_started_at,
+            )
+
+            hyperparameter_search_report = safe_hyperparameter_search(
+                model_name=model_name,
+                X_train=X_train,
+                y_train=y_train,
+                options=options,
+                mode=options["hyperparameter_search"],
+            )
+            if hyperparameter_search_report.get("best_parameters"):
+                options.update(hyperparameter_search_report["best_parameters"])
+
+            if hyperparameter_search_report.get("enabled"):
+                search_detail = (
+                    f"{hyperparameter_search_report['mode_title']}: "
+                    f"{hyperparameter_search_report['successful_candidates_count']} из "
+                    f"{hyperparameter_search_report['candidates_count']} кандидатов, "
+                    f"best validation R2={hyperparameter_search_report['best_score']}."
+                )
+                search_status = "success"
+            elif hyperparameter_search_report.get("warning"):
+                search_detail = hyperparameter_search_report["warning"]
+                search_status = "warning"
+            else:
+                search_detail = "Автоподбор отключен, используются параметры из формы."
+                search_status = "success"
+
+            step_started_at = add_training_protocol_step(
+                training_protocol,
+                "Подбор гиперпараметров",
+                search_detail,
+                step_started_at,
+                status=search_status,
             )
 
             model, loss_history = train_model(
@@ -722,6 +815,7 @@ def upload():
                 residual_report=json_dump(residual_report),
                 adequacy_report=json_dump(adequacy_report),
                 training_protocol=json_dump(training_protocol),
+                hyperparameter_search_report=json_dump(hyperparameter_search_report),
             )
 
             return render_template(
@@ -734,6 +828,7 @@ def upload():
                 residual_report=residual_report,
                 adequacy_report=adequacy_report,
                 training_protocol=training_protocol,
+                hyperparameter_search_report=hyperparameter_search_report,
                 cv_metrics=cv_metrics,
                 parameters=parameters,
                 rows_count=len(df),
@@ -756,15 +851,20 @@ def upload():
                 preset_datasets=PRESET_DATASETS,
                 model_options=MODEL_OPTIONS,
                 selected_model=model_name,
+                search_mode_options=SEARCH_MODE_OPTIONS,
             )
 
     return render_template(
         "upload.html",
         preset_datasets=PRESET_DATASETS,
         model_options=MODEL_OPTIONS,
+        search_mode_options=SEARCH_MODE_OPTIONS,
         selected_knn_neighbors=5,
+        selected_knn_weights="uniform",
+        selected_knn_p=2,
         selected_mlp_epochs=300,
         selected_mlp_patience=25,
+        selected_hyperparameter_search="none",
     )
 
 
@@ -795,9 +895,13 @@ def compare_models():
                     "compare.html",
                     error="Датасет содержит ошибки. Исправьте их перед сравнением.",
                     preset_datasets=PRESET_DATASETS,
+                    search_mode_options=SEARCH_MODE_OPTIONS,
                     selected_knn_neighbors=options["knn_neighbors"],
+                    selected_knn_weights=options["knn_weights"],
+                    selected_knn_p=options["knn_p"],
                     selected_mlp_epochs=options["mlp_epochs"],
                     selected_mlp_patience=options["mlp_patience"],
+                    selected_hyperparameter_search=options["hyperparameter_search"],
                     dataset_profile=dataset_profile,
                     source_name=source_name,
                 )
@@ -808,11 +912,22 @@ def compare_models():
 
             results = []
             for model_name, model_title in MODEL_OPTIONS.items():
+                model_options_for_training = dict(options)
+                search_report = safe_hyperparameter_search(
+                    model_name=model_name,
+                    X_train=X_train,
+                    y_train=y_train,
+                    options=model_options_for_training,
+                    mode=options["hyperparameter_search"],
+                )
+                if search_report.get("best_parameters"):
+                    model_options_for_training.update(search_report["best_parameters"])
+
                 model, _ = train_model(
                     model_name,
                     X_train,
                     y_train,
-                    options=options,
+                    options=model_options_for_training,
                     validation_data=(X_test, y_test),
                 )
                 y_pred_scaled = predict_test_values(model, model_name, X_test)
@@ -824,6 +939,9 @@ def compare_models():
                     "model": model_title,
                     "cv_r2_mean": cv_metrics["r2_mean"] if cv_metrics else None,
                     "cv_r2_std": cv_metrics["r2_std"] if cv_metrics else None,
+                    "search_enabled": search_report.get("enabled", False),
+                    "search_candidates_count": search_report.get("successful_candidates_count", 0),
+                    "search_best_score": search_report.get("best_score"),
                     **metrics,
                 })
 
@@ -843,8 +961,12 @@ def compare_models():
                 comparison_chart=comparison_chart,
                 dataset_profile=dataset_profile,
                 selected_knn_neighbors=options["knn_neighbors"],
+                selected_knn_weights=options["knn_weights"],
+                selected_knn_p=options["knn_p"],
                 selected_mlp_epochs=options["mlp_epochs"],
                 selected_mlp_patience=options["mlp_patience"],
+                selected_hyperparameter_search=options["hyperparameter_search"],
+                search_mode_options=SEARCH_MODE_OPTIONS,
             )
 
         except Exception as exc:
@@ -853,14 +975,19 @@ def compare_models():
                 "compare.html",
                 error=f"Ошибка обработки файла: {exc}",
                 preset_datasets=PRESET_DATASETS,
+                search_mode_options=SEARCH_MODE_OPTIONS,
             )
 
     return render_template(
         "compare.html",
         preset_datasets=PRESET_DATASETS,
+        search_mode_options=SEARCH_MODE_OPTIONS,
         selected_knn_neighbors=5,
+        selected_knn_weights="uniform",
+        selected_knn_p=2,
         selected_mlp_epochs=300,
         selected_mlp_patience=25,
+        selected_hyperparameter_search="none",
     )
 
 
@@ -1011,6 +1138,7 @@ def decode_training_row(row):
         "residual_report": json_load(row["residual_report"], None),
         "adequacy_report": json_load(row["adequacy_report"], None),
         "training_protocol": json_load(row["training_protocol"], None),
+        "hyperparameter_search_report": json_load(row["hyperparameter_search_report"], None),
     }
 
 
@@ -1020,10 +1148,13 @@ def build_training_history_view(rows):
         item = {key: row[key] for key in row.keys()}
         adequacy_report = json_load(row["adequacy_report"], {})
         baseline_metrics = json_load(row["baseline_metrics"], {})
+        search_report = json_load(row["hyperparameter_search_report"], {})
         item["verdict"] = adequacy_report.get("verdict")
         item["verdict_label"] = adequacy_report.get("verdict_label")
         item["baseline_improvement_percent"] = adequacy_report.get("baseline_improvement_percent")
         item["baseline_rmse"] = baseline_metrics.get("rmse")
+        item["search_enabled"] = search_report.get("enabled", False)
+        item["search_mode_title"] = search_report.get("mode_title")
         view_rows.append(item)
     return view_rows
 
@@ -1076,12 +1207,14 @@ def export_models_csv():
         "cv_r2_std",
         "adequacy_verdict",
         "baseline_improvement_percent",
+        "hyperparameter_search",
         "parameters",
         "artifact_dir",
     ])
 
     for row in rows:
         adequacy_report = json_load(row["adequacy_report"], {})
+        search_report = json_load(row["hyperparameter_search_report"], {})
         writer.writerow([
             row["id"],
             row["created_at"],
@@ -1098,6 +1231,7 @@ def export_models_csv():
             row["cv_r2_std"],
             adequacy_report.get("verdict_label"),
             adequacy_report.get("baseline_improvement_percent"),
+            search_report.get("mode_title"),
             row["parameters"],
             row["artifact_dir"],
         ])
@@ -1152,6 +1286,10 @@ def export_model_report_csv(training_id):
         writer.writerow(["adequacy_verdict", decoded["adequacy_report"].get("verdict_label")])
         writer.writerow(["adequacy_summary", decoded["adequacy_report"].get("summary")])
         writer.writerow(["baseline_improvement_percent", decoded["adequacy_report"].get("baseline_improvement_percent")])
+    if decoded["hyperparameter_search_report"]:
+        writer.writerow(["hyperparameter_search_mode", decoded["hyperparameter_search_report"].get("mode_title")])
+        writer.writerow(["hyperparameter_search_enabled", decoded["hyperparameter_search_report"].get("enabled")])
+        writer.writerow(["hyperparameter_search_best_score", decoded["hyperparameter_search_report"].get("best_score")])
     if decoded["residual_report"]:
         writer.writerow(["residual_mean", decoded["residual_report"].get("residual_mean")])
         writer.writerow(["p90_abs_error", decoded["residual_report"].get("p90_abs_error")])
@@ -1230,6 +1368,15 @@ def export_model_report_pdf(training_id):
             "",
             f"Вердикт: {decoded['adequacy_report'].get('verdict_label')}",
             decoded["adequacy_report"].get("summary") or "",
+        ])
+
+    if decoded["hyperparameter_search_report"]:
+        lines.extend([
+            "",
+            "Автоподбор гиперпараметров:",
+            f"Режим: {decoded['hyperparameter_search_report'].get('mode_title')}",
+            f"Кандидатов: {decoded['hyperparameter_search_report'].get('successful_candidates_count')} / {decoded['hyperparameter_search_report'].get('candidates_count')}",
+            f"Best validation R2: {decoded['hyperparameter_search_report'].get('best_score')}",
         ])
 
     if decoded["coefficients"]:
